@@ -1,5 +1,7 @@
 # Web Automation Tools
 
+![Screenshot](_example/logo.png)
+
 ## Launch
 
 ```bash
