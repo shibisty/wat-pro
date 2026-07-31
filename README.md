@@ -110,3 +110,5 @@ A single automated run (Qt offscreen) verified:
   verify**, since the sandbox's offscreen mode cannot validate actual
   on-screen rendering.
 - Cron scheduling is still Windows-only (`schtasks.exe`).
+
+![Screenshot](_example/Screenshot_1.png)
