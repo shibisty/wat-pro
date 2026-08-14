@@ -2,6 +2,8 @@
 
 ![Screenshot](_example/logo.png)
 
+[![Patreon](https://c5.patreon.com/external/logo/become_a_patron_button.png)](https://www.patreon.com/cw/shibisty)
+
 ## Launch
 
 ```bash
@@ -112,3 +114,7 @@ A single automated run (Qt offscreen) verified:
 - Cron scheduling is still Windows-only (`schtasks.exe`).
 
 ![Screenshot](_example/Screenshot_1.png)
+
+[![Patreon](https://c5.patreon.com/external/logo/become_a_patron_button.png)](https://www.patreon.com/cw/shibisty)
+
+If this project helps you, consider supporting its development on Patreon ❤️
