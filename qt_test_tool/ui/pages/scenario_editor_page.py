@@ -21,6 +21,8 @@ from ...web.zoomable_canvas import ZoomableWebCanvas
 from ...widgets.cards import make_card
 from ...widgets.html_viewer import HtmlHighlighter, HtmlCodeViewer
 from ...widgets.dom_tree_view import DomTreeView
+from ...widgets.local_storage_view import LocalStorageView
+from ...widgets.cache_files_view import CacheFilesView
 from ...widgets.history_line_edit import HistoryLineEdit
 
 from ..mixins.device_zoom_mixin import DeviceZoomMixin
@@ -176,7 +178,7 @@ class ScenarioEditorPage(
         html_header.addWidget(self.html_section_label)
         html_header.addStretch()
         self.html_refresh_btn = QPushButton()
-        self.html_refresh_btn.clicked.connect(self._poll_html_source)
+        self.html_refresh_btn.clicked.connect(self.refresh_html_panels)
         html_header.addWidget(self.html_refresh_btn)
         html_card_layout.addLayout(html_header)
 
@@ -187,6 +189,13 @@ class ScenarioEditorPage(
 
         self.dom_tree_view = DomTreeView()
         self.html_tabs.addTab(self.dom_tree_view, "")
+
+        self.local_storage_view = LocalStorageView()
+        self.html_tabs.addTab(self.local_storage_view, "")
+
+        self.cache_files_view = CacheFilesView()
+        self.cache_files_view.customContextMenuRequested.connect(self._on_cache_context_menu)
+        self.html_tabs.addTab(self.cache_files_view, "")
 
         self.html_viewer.hoveredSelectorChanged.connect(self._on_hover_selector_changed)
         self.dom_tree_view.hoveredSelectorChanged.connect(self._on_hover_selector_changed)
@@ -528,4 +537,8 @@ class ScenarioEditorPage(
         self.html_refresh_btn.setText("🔄  " + t("btn_refresh"))
         self.html_tabs.setTabText(0, t("tab_code"))
         self.html_tabs.setTabText(1, t("tab_tree"))
+        self.html_tabs.setTabText(2, t("tab_localstorage"))
+        self.html_tabs.setTabText(3, t("tab_cache"))
+        self.local_storage_view.setHorizontalHeaderLabels([t(k) for k in self.local_storage_view.header_keys])
+        self.cache_files_view.setHorizontalHeaderLabels([t(k) for k in self.cache_files_view.header_keys])
         

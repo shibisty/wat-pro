@@ -274,9 +274,13 @@ def build_stylesheet(theme_name: str) -> str:
         color: {c['text']};
         alternate-background-color: {c['surface_alt']};
     }}
-    QTreeWidget::branch {{
-        background: {c['surface']};
-    }}
+    /* ВАЖНО: не стилизуем QTreeWidget::branch вообще — как только
+       задаёшь для него хоть одно свойство (даже просто background),
+       Qt перестаёт рисовать нативную стрелочку разворачивания и ждёт,
+       что вы сами предоставите картинки под все состояния (:closed,
+       :open и т.д.). Без ::branch-правила фон под стрелкой берётся из
+       общего правила QTreeWidget {{ background: ... }} выше, а сама
+       стрелка рисуется нативно (значит, всегда видна, в любой теме). */
     QListWidget::item {{
         border-radius: 6px;
         padding: 10px 10px;

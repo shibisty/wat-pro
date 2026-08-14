@@ -8,6 +8,8 @@ from PyQt6.QtWebEngineCore import (
     QWebEnginePage, QWebEngineUrlRequestInterceptor, QWebEngineScript
 )
 
+from .inspect_js import RESOURCE_OBSERVER_INSTALL_JS
+
 
 def build_page_init_script(navigator_language: str, theme: str) -> str:
     """
@@ -112,21 +114,35 @@ def configure_profile(profile, interceptor, accept_language, navigator_language,
     Единая настройка любого профиля WebEngine — и общего (defaultProfile,
     обычный интерактивный браузинг), и одноразового off-the-record
     профиля для прогона сценария (см. ScenarioMixin._start_fresh_session):
-    подставляет перехватчик заголовков, Accept-Language и JS-мост
-    языка/темы. Вынесено отдельно, чтобы не дублировать эту настройку в
-    двух местах.
+    подставляет перехватчик заголовков, Accept-Language, JS-мост
+    языка/темы и наблюдатель за загруженными ресурсами (вкладка "Кэш").
+    Вынесено отдельно, чтобы не дублировать эту настройку в двух местах.
     """
     profile.setUrlRequestInterceptor(interceptor)
     profile.setHttpAcceptLanguage(accept_language)
     scripts = profile.scripts()
     scripts.clear()
-    script = QWebEngineScript()
-    script.setName("app-theme-lang-bridge")
-    script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
-    script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
-    script.setRunsOnSubFrames(True)
-    script.setSourceCode(build_page_init_script(navigator_language, theme))
-    scripts.insert(script)
+
+    bridge_script = QWebEngineScript()
+    bridge_script.setName("app-theme-lang-bridge")
+    bridge_script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+    bridge_script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+    bridge_script.setRunsOnSubFrames(True)
+    bridge_script.setSourceCode(build_page_init_script(navigator_language, theme))
+    scripts.insert(bridge_script)
+
+    # Ставим НАБЛЮДАТЕЛЬ за ресурсами максимально рано (до скриптов самой
+    # страницы) — иначе на некоторых сайтах (напр. YouTube, у которого своя
+    # телеметрия сама вызывает performance.clearResourceTimings()) к моменту
+    # клика на вкладку "Кэш" список окажется пустым, хотя всё реально
+    # грузилось. См. web/inspect_js.py.
+    resource_observer_script = QWebEngineScript()
+    resource_observer_script.setName("app-resource-observer")
+    resource_observer_script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+    resource_observer_script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+    resource_observer_script.setRunsOnSubFrames(True)
+    resource_observer_script.setSourceCode(RESOURCE_OBSERVER_INSTALL_JS)
+    scripts.insert(resource_observer_script)
 
 
 # ---------------------------------------------------------------------------

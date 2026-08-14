@@ -11,7 +11,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QComboBox, QStackedWidget,
 )
-from PyQt6.QtWebEngineCore import QWebEngineProfile, QWebEngineScript
+from PyQt6.QtWebEngineCore import QWebEngineProfile
 
 from ..core.config import SETTINGS_PATH, APP_FULL_NAME, ICON_PATH
 from ..core.i18n import (
@@ -20,7 +20,7 @@ from ..core.i18n import (
 )
 from ..core.system_theme import detect_system_theme, apply_native_titlebar_theme
 from ..core.theming import build_stylesheet
-from ..web.page import HeaderInterceptor, build_page_init_script, build_live_update_script
+from ..web.page import HeaderInterceptor, build_live_update_script, configure_profile
 from ..data import database, scenarios_repo
 
 from .pages.scenario_editor_page import ScenarioEditorPage
@@ -168,17 +168,18 @@ class AppShell(QMainWindow):
 
     # ---------------- Тема/язык (общие для всех страниц) ----------------
     def _install_page_scripts(self):
+        """
+        Раньше здесь была своя копия настройки скриптов профиля — из-за
+        этого дефолтный профиль (используется до первого запуска сценария,
+        когда ещё не подменили страницу на off-the-record) не получал
+        наблюдатель за ресурсами (вкладка "Кэш" пустая) и вообще был
+        источником рассинхронизации с configure_profile(). Теперь оба
+        места настройки профиля идут через одну и ту же функцию.
+        """
         profile = QWebEngineProfile.defaultProfile()
-        scripts = profile.scripts()
-        scripts.clear()
-        script = QWebEngineScript()
-        script.setName("app-theme-lang-bridge")
-        script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
-        script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
-        script.setRunsOnSubFrames(True)
         nav_lang = NAVIGATOR_LOCALE_MAP.get(self.language, "en-US")
-        script.setSourceCode(build_page_init_script(nav_lang, self.theme))
-        scripts.insert(script)
+        accept_lang = ACCEPT_LANGUAGE_MAP.get(self.language, ACCEPT_LANGUAGE_MAP["en"])
+        configure_profile(profile, self.interceptor, accept_lang, nav_lang, self.theme)
 
     def apply_theme(self):
         self.setStyleSheet(build_stylesheet(self.theme))
@@ -243,3 +244,4 @@ class AppShell(QMainWindow):
             self.page_buttons[key].setToolTip(t(tr_key))
         self.lang_combo.setToolTip(t("tooltip_language_select"))
         self.theme_btn.setToolTip(t("tooltip_theme_toggle"))
+        
