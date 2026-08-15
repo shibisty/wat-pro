@@ -65,6 +65,17 @@ class ScenarioEditorPage(
         outer.setContentsMargins(0, 0, 0, 0)
         outer.setSpacing(0)
 
+        # Read saved side-dock widths NOW, before building anything —
+        # see _restore_dock_state() for the long version of why: applying
+        # a saved width AFTER the window's first layout pass has already
+        # happened turned out to be unreliable (both resizeDocks() and a
+        # temporary minimumWidth bump failed to actually take effect).
+        # Baking it into the widgets' initial minimumWidth instead means
+        # Qt accounts for it on the very first, natural layout pass,
+        # rather than us fighting an already-settled one afterward.
+        self._initial_left_width = self.app.settings.value("window/left_dock_width", 280, type=int) or 280
+        self._initial_right_width = self.app.settings.value("window/right_dock_width", 280, type=int) or 280
+
         # ---- local scenario-management sub-bar: name, URL, size — used
         # to live separately in nav_bar/device_bar, now sits next to the
         # scenario picker, because these are the scenario's own
@@ -158,7 +169,7 @@ class ScenarioEditorPage(
 
         self.html_highlighter = HtmlHighlighter(self.html_viewer.document(), THEMES[self.theme])
 
-        html_panel.setMinimumWidth(280)
+        html_panel.setMinimumWidth(self._initial_right_width)
 
         # ============ MIDDLE COLUMN: tools + scenario steps ============
         left = QWidget()
@@ -245,7 +256,7 @@ class ScenarioEditorPage(
 
         left_layout.addWidget(scenario_card, stretch=1)
 
-        left.setMinimumWidth(280)
+        left.setMinimumWidth(self._initial_left_width)
 
         self.left_dock = QDockWidget()
         self.left_dock.setObjectName("leftDock")
@@ -456,6 +467,20 @@ class ScenarioEditorPage(
         # event loop processes the initial show/layout event instead.
         QTimer.singleShot(0, self._restore_dock_state)
 
+        # The saved width was baked into left/html_panel's initial
+        # minimumWidth above so Qt honors it on the very first layout
+        # pass. Left as-is forever, it would permanently prevent shrinking
+        # the panel below whatever was last saved. Once that first pass
+        # has settled (long enough after show that it reliably has, on a
+        # real window — unlike trying to push a size onto an
+        # already-settled layout, which is what didn't work before),
+        # lower the minimum back to the true floor so the user can resize
+        # freely again; the panel's current (already correct) width isn't
+        # affected by lowering a minimum.
+        def _release_min_width():
+            left.setMinimumWidth(280)
+            html_panel.setMinimumWidth(280)
+        QTimer.singleShot(600, _release_min_width)
 
     def _restore_dock_state(self):
         # Corners must be set BEFORE restoreState, not after — setting
@@ -482,19 +507,12 @@ class ScenarioEditorPage(
         if state is not None:
             self.inner_window.restoreState(state)
 
-        # Qt's own restoreState() reliably restores the console's
-        # (vertical) height, but NOT the left/right docks' (horizontal)
-        # width in combination with our corner-ownership setup above —
-        # observed directly: width silently reverts, height doesn't.
-        # Rather than fight Qt's internal splitter serialization, we
-        # persist these two widths explicitly, in our own settings keys,
-        # and reapply them here on top of whatever restoreState() did.
-        left_width = self.app.settings.value("window/left_dock_width", type=int)
-        if left_width:
-            self.inner_window.resizeDocks([self.left_dock], [left_width], Qt.Orientation.Horizontal)
-        right_width = self.app.settings.value("window/right_dock_width", type=int)
-        if right_width:
-            self.inner_window.resizeDocks([self.html_dock], [right_width], Qt.Orientation.Horizontal)
+        # Note: left/right dock width restoration no longer happens here.
+        # Trying to push a width onto the docks AFTER this point (via
+        # resizeDocks() or a temporary minimumWidth bump) turned out to
+        # be unreliable — the saved width is instead baked into
+        # left/html_panel's initial minimumWidth back in _build_ui(),
+        # before the window's first layout pass ever happens.
 
     def save_splitter_state(self):
         """Name kept for backward compatibility with the call from shell.closeEvent()."""
