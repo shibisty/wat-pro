@@ -187,5 +187,7 @@
   "menu_file": "파일",
   "menu_exit": "종료",
   "menu_view": "보기",
-  "menu_languages": "언어"
+  "menu_languages": "언어",
+  "tooltip_clear_console_input": "입력 지우기",
+  "menu_create_scenario": "시나리오 만들기"
 }

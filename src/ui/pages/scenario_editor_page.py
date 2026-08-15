@@ -76,22 +76,12 @@ class ScenarioEditorPage(
         self._initial_left_width = self.app.settings.value("window/left_dock_width", 280, type=int) or 280
         self._initial_right_width = self.app.settings.value("window/right_dock_width", 280, type=int) or 280
 
-        # ---- local scenario-management sub-bar: name, URL, size — used
-        # to live separately in nav_bar/device_bar, now sits next to the
-        # scenario picker, because these are the scenario's own
-        # properties, not just the current browser session's state ----
-        scen_bar = QWidget()
-        scen_bar.setObjectName("pageSubBar")
-        scen_layout = QHBoxLayout(scen_bar)
-        scen_layout.setContentsMargins(20, 8, 20, 8)
-        scen_layout.setSpacing(8)
-
-        self.new_scen_btn = QPushButton("＋")
-        self.new_scen_btn.setProperty("class", "circleBtn")
-        self.new_scen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.new_scen_btn.clicked.connect(self.new_scenario)
-        scen_layout.addWidget(self.new_scen_btn)
-
+        # scenario_combo/edit_scen_btn/delete_scen_btn are created here
+        # (this is where their state/logic lives, via ScenarioMixin) but
+        # NOT placed in this page's own layout — AppShell picks them up
+        # into its top AppBar, next to the page-switch icons (see
+        # shell.py's _build_ui). new_scen_btn's old spot is now
+        # File → Create scenario in the menu bar instead of a button here.
         self.scenario_combo = QComboBox()
         self.scenario_combo.setObjectName("appbarScenarioCombo")
         # selecting in the list loads the scenario immediately — there's
@@ -102,23 +92,16 @@ class ScenarioEditorPage(
         # clicking it should still do something, but currentIndexChanged
         # wouldn't fire at all in that case)
         self.scenario_combo.activated.connect(self.on_scenario_selected)
-        scen_layout.addWidget(self.scenario_combo)
 
         self.edit_scen_btn = QPushButton("✏️")
         self.edit_scen_btn.setProperty("class", "circleBtn")
         self.edit_scen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.edit_scen_btn.clicked.connect(self.edit_scenario_name)
-        scen_layout.addWidget(self.edit_scen_btn)
 
         self.delete_scen_btn = QPushButton("🗑️")
         self.delete_scen_btn.setProperty("class", "circleBtn")
         self.delete_scen_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.delete_scen_btn.clicked.connect(self.delete_scenario)
-        scen_layout.addWidget(self.delete_scen_btn)
-
-        scen_layout.addStretch()
-
-        outer.addWidget(scen_bar)
 
         # ---- content: an embedded QMainWindow with docks — this way
         # panels get a proper minimum size when dragged, a "close"
@@ -132,14 +115,12 @@ class ScenarioEditorPage(
         # ============ LEFT COLUMN: page HTML source (live, read-only) ============
         html_panel = QWidget()
         html_panel_layout = QVBoxLayout(html_panel)
-        html_panel_layout.setContentsMargins(18, 18, 8, 18)
+        html_panel_layout.setContentsMargins(18, 8, 8, 18)
         html_panel_layout.setSpacing(10)
 
         html_card, html_card_layout = make_card("")
+        html_card_layout.setContentsMargins(18, 6, 18, 18)
         html_header = QHBoxLayout()
-        self.html_section_label = QLabel()
-        self.html_section_label.setProperty("class", "sectionLabel")
-        html_header.addWidget(self.html_section_label)
         html_header.addStretch()
         self.html_refresh_btn = QPushButton()
         self.html_refresh_btn.clicked.connect(self.refresh_html_panels)
@@ -189,9 +170,7 @@ class ScenarioEditorPage(
         left_layout.addWidget(tools_card)
 
         scenario_card, scenario_layout = make_card("")
-        self.scenario_section_label = QLabel()
-        self.scenario_section_label.setProperty("class", "sectionLabel")
-        scenario_layout.addWidget(self.scenario_section_label)
+        scenario_layout.setContentsMargins(18, 6, 18, 18)
         self._refresh_scenario_list()
 
         self.steps_list = QListWidget()
@@ -370,7 +349,12 @@ class ScenarioEditorPage(
         self.zoom_combo.lineEdit().returnPressed.connect(self.on_zoom_manual_entry)
         nav_layout.addWidget(self.zoom_combo)
 
-        right_layout.addWidget(nav_bar)
+        # nav_bar is inserted into the page-wide `outer` layout (not
+        # right_layout) further down, once it's fully built — it now
+        # spans the full page width, in the spot that used to hold
+        # scen_bar, rather than being nested inside just the browser
+        # column. See the outer.insertWidget(0, nav_bar) call below.
+        outer.insertWidget(0, nav_bar)
 
         self.web_view = QWebEngineView()
         page = LoggingWebPage(
@@ -378,6 +362,7 @@ class ScenarioEditorPage(
         )
         self.web_view.setPage(page)
         page.loadFinished.connect(self._on_page_load_finished)
+        page.urlChanged.connect(self._on_page_url_changed)
         page.bridge.dataInserted.connect(self._on_bridge_insert)
 
         # Load about:blank right away — without this the page never goes
@@ -410,10 +395,8 @@ class ScenarioEditorPage(
 
         # ============ CONSOLE: at the bottom, also a dock ============
         console_card, console_layout = make_card("")
+        console_layout.setContentsMargins(0, 6, 0, 18)  # no side padding — see below
         console_header = QHBoxLayout()
-        self.console_title = QLabel()
-        self.console_title.setProperty("class", "sectionLabel")
-        console_header.addWidget(self.console_title)
         console_header.addStretch()
         self.clear_console_btn = QPushButton()
         self.clear_console_btn.clicked.connect(self.clear_console)
@@ -426,13 +409,20 @@ class ScenarioEditorPage(
         console_body.addWidget(self.console_output, stretch=1)
         console_layout.addLayout(console_body, stretch=1)
 
+        console_input_row = QHBoxLayout()
         self.console_input = HistoryLineEdit()
         self.console_input.returnPressed.connect(self.run_console_command)
-        console_layout.addWidget(self.console_input)
+        console_input_row.addWidget(self.console_input, stretch=1)
+        self.clear_console_input_btn = QPushButton("✕")
+        self.clear_console_input_btn.setProperty("class", "circleBtn")
+        self.clear_console_input_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.clear_console_input_btn.clicked.connect(self.console_input.clear)
+        console_input_row.addWidget(self.clear_console_input_btn)
+        console_layout.addLayout(console_input_row)
 
         console_wrapper = QWidget()
         console_wrapper_layout = QVBoxLayout(console_wrapper)
-        console_wrapper_layout.setContentsMargins(18, 8, 18, 18)
+        console_wrapper_layout.setContentsMargins(0, 8, 0, 18)  # side padding removed here too
         console_wrapper_layout.addWidget(console_card)
         console_wrapper.setMinimumHeight(120)
 
@@ -556,7 +546,6 @@ class ScenarioEditorPage(
 
     def retranslate(self):
         t = self.t
-        self.new_scen_btn.setToolTip(t("tooltip_new_scenario"))
         self.scenario_combo.setToolTip(t("tooltip_scenario_select"))
         if self.scenario_combo.count() > 0:
             self.scenario_combo.setItemText(0, t("placeholder_choose_scenario"))
@@ -568,7 +557,6 @@ class ScenarioEditorPage(
         self.randomize_btn.setText("🎲  " + t("btn_randomize_form"))
         self.randomize_btn.setToolTip(t("tooltip_randomize_form"))
 
-        self.scenario_section_label.setText(t("section_scenario_steps"))
         self.left_dock.setWindowTitle(t("section_scenario_steps"))
         self.add_step_btn.setToolTip(t("tooltip_add_step"))
         self.edit_step_btn.setToolTip(t("tooltip_edit_step"))
@@ -579,8 +567,8 @@ class ScenarioEditorPage(
         self.pause_btn.setToolTip(t("tooltip_pause_scenario"))
         self.resume_btn.setToolTip(t("tooltip_resume_scenario"))
 
-        self.console_title.setText(t("section_console"))
         self.console_dock.setWindowTitle(t("section_console"))
+        self.clear_console_input_btn.setToolTip(t("tooltip_clear_console_input"))
         self.clear_console_btn.setText("🗑  " + t("btn_clear_console"))
         self.console_input.setPlaceholderText(t("console_placeholder"))
 
@@ -599,7 +587,6 @@ class ScenarioEditorPage(
             self.zoom_combo.setEditText(t("zoom_auto"))
         self.zoom_combo.blockSignals(False)
 
-        self.html_section_label.setText(t("section_auxiliary_tools"))
         self.html_dock.setWindowTitle(t("section_auxiliary_tools"))
         self.html_refresh_btn.setText("🔄  " + t("btn_refresh"))
         self.html_tabs.setTabText(0, t("tab_code"))

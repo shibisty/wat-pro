@@ -20,7 +20,11 @@ class DeviceZoomMixin:
         self.web_view.setFixedSize(self.width_spin.value(), self.height_spin.value())
         self.device_canvas.update_content_size()
         self._recompute_auto_zoom()
-        self._save_live_size()
+        # Deliberately no autosave here — changing the size in the fields
+        # next to the address bar is a "try it out" action on the live
+        # session, not a commitment to change the scenario's configured
+        # start size. Only the explicit scenario edit dialog
+        # (ScenarioDialog) updates what's saved.
 
     def _on_canvas_resized(self):
         self._recompute_auto_zoom()
@@ -77,3 +81,4 @@ class DeviceZoomMixin:
         percent = max(10, min(500, int(digits)))
         self.zoom_auto = False
         self._apply_zoom(percent, update_combo_text=True)
+        

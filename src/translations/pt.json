@@ -187,5 +187,7 @@
   "menu_file": "Arquivo",
   "menu_exit": "Sair",
   "menu_view": "Exibir",
-  "menu_languages": "Idiomas"
+  "menu_languages": "Idiomas",
+  "tooltip_clear_console_input": "Limpar entrada",
+  "menu_create_scenario": "Criar cenário"
 }

@@ -1,0 +1,21 @@
+v0.0.2
+
+Fixes
+- Autosaving a scenario no longer overwrites the initial URL and window size
+- Window management has been moved to the View tab in the Menu Bar
+- Scenario creation has been moved to the File tab in the Menu Bar
+- Language selection has been moved to the Languages tab in the Menu Bar
+- Fixed light theme display issues
+- Added arrows to dropdown lists
+- Multiple minor UI/UX improvements
+
+Features
+- Added jQuery and Lodash libraries to the console and step editor, available through the g$ object (for jQuery) and g_ (for Lodash)
+- Added the InsertToDB(string) JavaScript function — accepts a string and writes it to the SQLite3 database. It can be used multiple times within a single step
+- Added file browsing to the Cache tab
+- Added localStorage browsing to the localStorage tab
+- Added search and column sorting to the tables in the Cache and localStorage tabs
+- Scenario files, settings.ini, and app_data.sqlite3 have been moved to %AppData%
+- Added a build based on QtWebEngine with H.264 support
+- Added scroll movement recording
+- Added explicit fields for the initial URL and window size to scenarios

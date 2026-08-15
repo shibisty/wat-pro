@@ -187,5 +187,7 @@
   "menu_file": "ファイル",
   "menu_exit": "終了",
   "menu_view": "表示",
-  "menu_languages": "言語"
+  "menu_languages": "言語",
+  "tooltip_clear_console_input": "入力をクリア",
+  "menu_create_scenario": "シナリオを作成"
 }

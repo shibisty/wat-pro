@@ -102,6 +102,12 @@ def build_stylesheet(theme_name: str) -> str:
         min-height: 64px;
         max-height: 64px;
     }}
+    #appbarSeparator {{
+        background: {c['border']};
+        max-width: 1px;
+        min-width: 1px;
+        margin: 14px 4px;
+    }}
     #themeToggle, QPushButton[class="appbarIconBtn"] {{
         background: transparent;
         color: {c['appbar_text']};

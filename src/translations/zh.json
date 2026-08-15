@@ -187,5 +187,7 @@
   "menu_file": "文件",
   "menu_exit": "退出",
   "menu_view": "视图",
-  "menu_languages": "语言"
+  "menu_languages": "语言",
+  "tooltip_clear_console_input": "清空输入",
+  "menu_create_scenario": "创建场景"
 }

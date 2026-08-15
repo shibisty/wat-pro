@@ -187,5 +187,7 @@
   "menu_file": "File",
   "menu_exit": "Exit",
   "menu_view": "View",
-  "menu_languages": "Languages"
+  "menu_languages": "Languages",
+  "tooltip_clear_console_input": "Clear input",
+  "menu_create_scenario": "Create scenario"
 }

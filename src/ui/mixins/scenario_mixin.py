@@ -190,32 +190,6 @@ class ScenarioMixin:
             # load explicitly
             self._load_scenario(self.scenario_combo.currentData())
 
-    def _save_live_size(self):
-        """
-        Explicitly saves ONLY width/height, whenever the user directly
-        changes them via the size fields/preset in nav_bar — a separate
-        path from _autosave() (which only ever touches steps). Resizing
-        is itself a deliberate user action on these specific fields, so
-        it should persist on its own, independent of whatever else is
-        going on with the scenario's steps (see _autosave()'s docstring
-        for why THAT one deliberately doesn't touch width/height).
-        """
-        if not self.current_scenario_name:
-            return
-        existing = None
-        if self.current_scenario_id is not None:
-            existing = scenarios_repo.get_scenario(self.current_scenario_id)
-        if existing is None:
-            existing = scenarios_repo.get_scenario_by_name(self.current_scenario_name)
-        if existing is None:
-            return  # nothing to attach this size change to yet
-
-        self.current_scenario_id = scenarios_repo.upsert_scenario_by_name(
-            self.current_scenario_name, existing.get("steps", []), existing.get("url", ""),
-            width=self.width_spin.value(), height=self.height_spin.value(),
-            zoom_auto=existing.get("zoom_auto", True), zoom_percent=existing.get("zoom_percent", 100),
-        )
-
     def _autosave(self):
         """
         Silent save, no dialogs/extra logs — called after any change to
@@ -383,6 +357,7 @@ class ScenarioMixin:
         )
         new_page = LoggingWebPage(profile, self.web_view, self._on_page_console_message)
         new_page.loadFinished.connect(self._on_page_load_finished)
+        new_page.urlChanged.connect(self._on_page_url_changed)
         new_page.bridge.dataInserted.connect(self._on_bridge_insert)
         self.web_view.setPage(new_page)
 
@@ -505,3 +480,4 @@ class ScenarioMixin:
             resume_from=resume_from,
         )
         self._update_run_controls()
+        

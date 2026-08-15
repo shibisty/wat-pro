@@ -9,7 +9,7 @@ from PyQt6.QtCore import Qt, QSettings
 from PyQt6.QtGui import QIcon, QActionGroup
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QStackedWidget,
+    QPushButton, QStackedWidget, QFrame,
 )
 from PyQt6.QtWebEngineCore import QWebEngineProfile
 
@@ -122,14 +122,6 @@ class AppShell(QMainWindow):
             top_layout.addWidget(btn)
             self.page_buttons[key] = btn
 
-        top_layout.addStretch()
-
-        self.theme_btn = QPushButton("🌙")
-        self.theme_btn.setObjectName("themeToggle")
-        self.theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.theme_btn.clicked.connect(self.toggle_theme)
-        top_layout.addWidget(self.theme_btn)
-
         outer.addWidget(top_bar)
 
         # ---- pages ----
@@ -143,6 +135,30 @@ class AppShell(QMainWindow):
 
         for key, _, _ in PAGES:
             self.stack.addWidget(self.pages[key])
+
+        # scenario_combo/edit_scen_btn/delete_scen_btn are CREATED inside
+        # ScenarioEditorPage (that's where their state/logic lives, via
+        # ScenarioMixin) but physically placed here instead, in the top
+        # AppBar — visible regardless of which page is active. A
+        # separator marks the boundary between page-switching and
+        # scenario management.
+        separator = QFrame()
+        separator.setObjectName("appbarSeparator")
+        separator.setFrameShape(QFrame.Shape.VLine)
+        top_layout.addWidget(separator)
+
+        editor = self.pages["scenario_editor"]
+        top_layout.addWidget(editor.scenario_combo)
+        top_layout.addWidget(editor.edit_scen_btn)
+        top_layout.addWidget(editor.delete_scen_btn)
+
+        top_layout.addStretch()
+
+        self.theme_btn = QPushButton("🌙")
+        self.theme_btn.setObjectName("themeToggle")
+        self.theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.theme_btn.clicked.connect(self.toggle_theme)
+        top_layout.addWidget(self.theme_btn)
 
         # docks referenced by the View menu must exist first — built
         # after the pages, not before
@@ -163,6 +179,9 @@ class AppShell(QMainWindow):
         menubar = self.menuBar()
 
         self.file_menu = menubar.addMenu("")
+        self.create_scenario_action = self.file_menu.addAction("")
+        self.create_scenario_action.triggered.connect(lambda: self.pages["scenario_editor"].new_scenario())
+        self.file_menu.addSeparator()
         self.exit_action = self.file_menu.addAction("")
         self.exit_action.triggered.connect(self.close)
 
@@ -277,6 +296,8 @@ class AppShell(QMainWindow):
             self.page_buttons[key].setToolTip(t(tr_key))
         self.theme_btn.setToolTip(t("tooltip_theme_toggle"))
         self.file_menu.setTitle(t("menu_file"))
+        self.create_scenario_action.setText(t("menu_create_scenario"))
         self.exit_action.setText(t("menu_exit"))
         self.view_menu.setTitle(t("menu_view"))
         self.languages_menu.setTitle(t("menu_languages"))
+        

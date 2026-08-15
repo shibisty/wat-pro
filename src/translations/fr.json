@@ -187,5 +187,7 @@
   "menu_file": "Fichier",
   "menu_exit": "Quitter",
   "menu_view": "Affichage",
-  "menu_languages": "Langues"
+  "menu_languages": "Langues",
+  "tooltip_clear_console_input": "Effacer la saisie",
+  "menu_create_scenario": "Créer un scénario"
 }

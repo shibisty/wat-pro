@@ -187,5 +187,7 @@
   "menu_file": "ملف",
   "menu_exit": "خروج",
   "menu_view": "عرض",
-  "menu_languages": "اللغات"
+  "menu_languages": "اللغات",
+  "tooltip_clear_console_input": "مسح الإدخال",
+  "menu_create_scenario": "إنشاء سيناريو"
 }

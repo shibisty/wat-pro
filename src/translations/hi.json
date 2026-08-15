@@ -187,5 +187,7 @@
   "menu_file": "फ़ाइल",
   "menu_exit": "बाहर निकलें",
   "menu_view": "देखें",
-  "menu_languages": "भाषाएँ"
+  "menu_languages": "भाषाएँ",
+  "tooltip_clear_console_input": "इनपुट साफ़ करें",
+  "menu_create_scenario": "परिदृश्य बनाएं"
 }

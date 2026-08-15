@@ -36,10 +36,16 @@ class CacheFilesView(QWidget):
         self.table.setSortingEnabled(True)
         self.table.verticalHeader().setDefaultSectionSize(32)
         self.header_keys = ["col_name", "col_type", "col_size", "col_cached"]
-        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        # Name used to be Stretch — with no floor, it shrank too
+        # aggressively on a narrow panel (truncated to "wp-…",
+        # "wooco…", etc). Interactive + an explicit starting width gives
+        # it real room, and the user can still drag it wider/narrower by
+        # hand; the short "Cached" column absorbs the remaining stretch instead.
+        self.table.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Interactive)
+        self.table.setColumnWidth(0, 220)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.table)
 
         # the external API stays the same as before (when the class
@@ -101,3 +107,4 @@ class CacheFilesView(QWidget):
             self.table.setItem(row, 2, size_item)
             self.table.setItem(row, 3, cached_item)
         self.table.setSortingEnabled(True)
+        

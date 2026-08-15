@@ -187,5 +187,7 @@
   "menu_file": "Datei",
   "menu_exit": "Beenden",
   "menu_view": "Ansicht",
-  "menu_languages": "Sprachen"
+  "menu_languages": "Sprachen",
+  "tooltip_clear_console_input": "Eingabe löschen",
+  "menu_create_scenario": "Szenario erstellen"
 }

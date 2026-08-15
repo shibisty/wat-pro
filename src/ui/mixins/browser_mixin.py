@@ -29,10 +29,10 @@ from ...web.inspect_js import (
 
 class BrowserMixin:
     def open_headers_dialog(self):
-        dlg = HeadersDialog(self.interceptor.headers, self.t, self)
+        dlg = HeadersDialog(self.app.interceptor.headers, self.t, self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            self.interceptor.headers = dlg.get_headers()
-            self.log(self.t("log_headers_updated").format(headers=self.interceptor.headers))
+            self.app.interceptor.headers = dlg.get_headers()
+            self.log(self.t("log_headers_updated").format(headers=self.app.interceptor.headers))
 
     # ---------------- Navigation ----------------
 
@@ -74,6 +74,22 @@ class BrowserMixin:
         if getattr(self, "recording", False):
             # recording listeners don't survive navigation — reinstall them
             self.web_view.page().runJavaScript(RECORDER_INSTALL_JS)
+
+    def _on_page_url_changed(self, url):
+        """
+        Keeps the address bar showing the CURRENT page URL — link clicks,
+        JS redirects, and in-page navigation all change the real URL
+        without the user ever typing anything into the address bar
+        themselves. Without this, the field only ever showed whatever
+        was originally typed/loaded, not where the browser actually is.
+        Skipped while the field has focus so it doesn't yank out
+        whatever the user is currently typing there.
+        """
+        if not self._web_view_alive():
+            return
+        if self.address_edit.hasFocus():
+            return
+        self.address_edit.setText(url.toString())
 
     def _poll_html_source(self):
         if not self._web_view_alive():

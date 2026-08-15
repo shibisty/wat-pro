@@ -187,5 +187,7 @@
   "menu_file": "Файл",
   "menu_exit": "Выход",
   "menu_view": "Вид",
-  "menu_languages": "Языки"
+  "menu_languages": "Языки",
+  "tooltip_clear_console_input": "Очистить поле ввода",
+  "menu_create_scenario": "Создать сценарий"
 }
