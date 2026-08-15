@@ -1,4 +1,4 @@
-"""JS-консоль: лог с историей (для перерисовки при смене темы), ввод команд."""
+"""JS console: a log with history (for redrawing on theme change), command input."""
 
 from ...core.theming import THEMES
 
@@ -20,9 +20,9 @@ class ConsoleMixin:
         self.console_output.append(f'<span style="color:{color}">{safe}</span>')
 
     def _rerender_console(self):
-        """Перестраивает весь вывод консоли под текущую тему — иначе старые
-        строки остаются раскрашенными под прошлую тему и становятся
-        нечитаемыми на новом фоне."""
+        """Rebuilds the entire console output for the current theme —
+        otherwise old lines stay colored for the previous theme and
+        become unreadable against the new background."""
         self.console_output.clear()
         for text, level in self.log_entries:
             self._append_log_line(text, level)

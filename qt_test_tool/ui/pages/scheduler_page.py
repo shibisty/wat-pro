@@ -1,7 +1,7 @@
 """
-Страница "Автоматизация" — создание/удаление/просмотр задач по расписанию.
-Расписание реально хранится в Windows Task Scheduler (schtasks.exe);
-таблица cron_jobs в SQLite — только зеркало для отображения.
+"Automation" page — create/delete/view scheduled tasks. The schedule is
+actually stored in Windows Task Scheduler (schtasks.exe); the cron_jobs
+table in SQLite is just a mirror for display.
 """
 
 import time
@@ -129,7 +129,7 @@ class SchedulerPage(QWidget):
         layout.addWidget(card, stretch=1)
 
     def apply_theme(self):
-        pass  # таблица/карточка стилизуются глобальным QSS через AppShell
+        pass  # the table/card are styled by the global QSS via AppShell
 
     def retranslate(self):
         t = self.t
@@ -159,7 +159,7 @@ class SchedulerPage(QWidget):
             ]
             for col, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
-                item.setData(1000, job["id"])  # прячем id задачи в UserRole-подобном слоте
+                item.setData(1000, job["id"])  # tuck the job id away in a UserRole-like slot
                 self.table.setItem(row, col, item)
 
     def _selected_job(self):

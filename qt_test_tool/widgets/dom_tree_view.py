@@ -1,8 +1,8 @@
 """
-Дерево контента страницы — вторая вкладка HTML-панели. Строится из JSON,
-который возвращает DOM_TREE_JS (см. web/dom_tree_js.py). При наведении на
-узел эмитит hoveredSelectorChanged(selector) — подписчик (страница
-редактора сценариев) подсвечивает соответствующий элемент в браузере.
+The page content tree — the second tab of the HTML panel. Built from the
+JSON returned by DOM_TREE_JS (see web/dom_tree_js.py). Emits
+hoveredSelectorChanged(selector) on hovering a node — the subscriber (the
+scenario editor page) highlights the corresponding element in the browser.
 """
 
 from PyQt6.QtCore import pyqtSignal, Qt
@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import QTreeWidget, QTreeWidgetItem, QHeaderView
 
 
 class DomTreeView(QTreeWidget):
-    hoveredSelectorChanged = pyqtSignal(str)  # пустая строка = снять подсветку
+    hoveredSelectorChanged = pyqtSignal(str)  # empty string = clear the highlight
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -18,12 +18,12 @@ class DomTreeView(QTreeWidget):
         self.setMouseTracking(True)
         self.viewport().setMouseTracking(True)
 
-        # Раньше колонка "Тег" была зафиксирована на 180px — на глубоко
-        # вложенных элементах отступ вложенности (indentation × уровень)
-        # съедал всю ширину колонки, и текст тега просто уезжал за
-        # видимую область (обрезался, выглядело как пустая строка).
-        # Теперь: меньший отступ на уровень + колонка подгоняется под
-        # реальное содержимое + горизонтальный скролл вместо обрезания.
+        # The "Tag" column used to be fixed at 180px — on deeply nested
+        # elements the indentation offset (indentation × level) ate up
+        # the whole column width, and the tag text just ran off the
+        # visible area (got clipped, looked like an empty row). Now:
+        # smaller per-level indentation + the column fits its actual
+        # content + horizontal scrolling instead of clipping.
         self.setIndentation(14)
         self.header().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.header().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
@@ -56,7 +56,7 @@ class DomTreeView(QTreeWidget):
         self.hoveredSelectorChanged.emit(selector)
 
     def load_tree(self, tree_data):
-        """tree_data — словарь nodeName/attributes/content/children/upeSelector, или None/с ключом error."""
+        """tree_data — a dict with nodeName/attributes/content/children/upeSelector, or None/with an error key."""
         self.clear()
         if not tree_data or "error" in tree_data:
             return

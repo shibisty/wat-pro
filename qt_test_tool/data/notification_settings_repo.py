@@ -1,7 +1,7 @@
 """
-Настройки SMTP-рассылки — всё, кроме пароля (тот хранится в keyring,
-см. notifications/secure_storage.py). Одна строка с id=1 — единая
-конфигурация на всё приложение.
+SMTP notification settings — everything except the password (that's
+stored in keyring, see notifications/secure_storage.py). One row with
+id=1 — a single configuration for the whole app.
 """
 
 DEFAULTS = {

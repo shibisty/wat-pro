@@ -1,6 +1,6 @@
 """
-Страница "Уведомления" — настройка SMTP-рассылки об успехе/неудаче
-прогона сценария. Пароль хранится через keyring, не в БД/settings.ini.
+"Notifications" page — configuring SMTP delivery for scenario run
+success/failure. The password is stored via keyring, not in the DB/settings.ini.
 """
 
 from PyQt6.QtWidgets import (

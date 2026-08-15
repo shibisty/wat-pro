@@ -1,14 +1,14 @@
-"""MUI-подобная карточка-панель, переиспользуется во всех блоках интерфейса."""
+"""A MUI-like card panel, reused across every block of the UI."""
 
 from PyQt6.QtWidgets import QFrame, QVBoxLayout, QLabel
 
 
 def make_card(title: str) -> tuple:
-    """Создаёт карточку-панель в духе MUI Paper с заголовком секции."""
+    """Creates a card panel in the spirit of MUI Paper, with a section title."""
     frame = QFrame()
     frame.setProperty("class", "card")
     frame.setObjectName("")
-    frame.setStyleSheet("")  # используем глобальный QSS через class-селектор
+    frame.setStyleSheet("")  # we use the global QSS via a class selector
     frame.setFrameShape(QFrame.Shape.NoFrame)
     layout = QVBoxLayout(frame)
     layout.setContentsMargins(18, 16, 18, 18)

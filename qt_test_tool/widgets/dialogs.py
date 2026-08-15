@@ -1,6 +1,6 @@
 """
-Модальные окна: редактирование HTTP-заголовков и редактирование одного
-шага сценария (с кнопкой вставки JS-рандомайзера форм).
+Modal dialogs: editing HTTP headers and editing a single scenario step
+(with a button to insert the JS form randomizer).
 """
 
 from PyQt6.QtWidgets import (
@@ -80,7 +80,7 @@ class HeadersDialog(QDialog):
 
 
 # ---------------------------------------------------------------------------
-# Диалог добавления/редактирования одного шага сценария
+# Dialog for adding/editing a single scenario step
 # ---------------------------------------------------------------------------
 class StepDialog(QDialog):
     def __init__(self, step: dict = None, tr=None, parent=None):
@@ -120,7 +120,7 @@ class StepDialog(QDialog):
         self.notify_check.setChecked(bool(step.get("notify", False)))
         layout.addWidget(self.notify_check)
 
-        # ---- синхронизация: ждать переход / ждать элемент / доп. пауза ----
+        # ---- sync: wait for navigation / wait for element / extra pause ----
         separator = QFrame()
         separator.setFrameShape(QFrame.Shape.HLine)
         layout.addWidget(separator)
@@ -187,4 +187,69 @@ class StepDialog(QDialog):
 
     def _insert_randomizer(self):
         self.js_edit.setPlainText(RANDOMIZE_FORM_JS.strip())
+
+
+# ---------------------------------------------------------------------------
+# Dialog for creating/editing a scenario: name + start page + size
+# ---------------------------------------------------------------------------
+class ScenarioDialog(QDialog):
+    def __init__(self, name="", url="", width=1366, height=768, tr=None, parent=None):
+        super().__init__(parent)
+        tr = tr or (lambda k: k)
+        self.setWindowTitle(tr("dialog_scenario_title"))
+        self.resize(440, 260)
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 16, 16, 16)
+        layout.setSpacing(8)
+
+        layout.addWidget(QLabel(tr("label_scenario_name")))
+        self.name_edit = QLineEdit()
+        self.name_edit.setText(name)
+        layout.addWidget(self.name_edit)
+
+        layout.addWidget(QLabel(tr("label_start_url")))
+        self.url_edit = QLineEdit()
+        self.url_edit.setText(url)
+        self.url_edit.setPlaceholderText(tr("placeholder_start_url"))
+        layout.addWidget(self.url_edit)
+
+        layout.addWidget(QLabel(tr("label_start_size")))
+        size_row = QHBoxLayout()
+        self.width_spin = QSpinBox()
+        self.width_spin.setRange(200, 7680)
+        self.width_spin.setValue(int(width or 1366))
+        self.width_spin.setSuffix(" px")
+        size_row.addWidget(self.width_spin)
+        size_row.addWidget(QLabel("×"))
+        self.height_spin = QSpinBox()
+        self.height_spin.setRange(200, 7680)
+        self.height_spin.setValue(int(height or 768))
+        self.height_spin.setSuffix(" px")
+        size_row.addWidget(self.height_spin)
+        size_row.addStretch()
+        layout.addLayout(size_row)
+
+        layout.addStretch()
+
+        btn_row = QHBoxLayout()
+        btn_row.addStretch()
+        cancel_btn = QPushButton(tr("btn_cancel"))
+        cancel_btn.setAutoDefault(False)
+        cancel_btn.clicked.connect(self.reject)
+        ok_btn = QPushButton(tr("btn_ok"))
+        ok_btn.setProperty("class", "primaryBtn")
+        ok_btn.setDefault(True)
+        ok_btn.setAutoDefault(True)
+        ok_btn.clicked.connect(self.accept)
+        btn_row.addWidget(cancel_btn)
+        btn_row.addWidget(ok_btn)
+        layout.addLayout(btn_row)
+
+    def get_data(self) -> dict:
+        return {
+            "name": self.name_edit.text().strip(),
+            "url": self.url_edit.text().strip(),
+            "width": self.width_spin.value(),
+            "height": self.height_spin.value(),
+        }
         

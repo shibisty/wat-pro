@@ -1,198 +1,189 @@
+# -*- mode: python ; coding: utf-8 -*-
 """
-Console test for a manually built PyQt6-WebEngine.
+Build WAT Pro as an executable.
 
-Run:
-python check_webengine.py
+Run (on Windows, from the folder containing run.py):
+    pyinstaller wat_pro.spec
 
-Checks:
-0. Module import and basic User-Agent
+Build mode: --onedir (COLLECT), not --onefile — this is more reliable for
+QtWebEngine: --onefile extracts everything to a temporary directory on every
+launch (adding extra startup time, and WebEngine resources may occasionally
+not be picked up on the first attempt); --onedir simply works.
 
-1. H.264/AAC — via JS canPlayType() on an empty page (no network)
-2. Spellchecker — enabling it + list of supported languages
-3. Printing/PDF — actual printToPdf() to the current directory
-4. WebRTC — presence of navigator.mediaDevices.getUserMedia in the JS environment
+Result: dist/WAT Pro/WAT Pro.exe — the entire "WAT Pro" folder must be
+distributed (it can be zipped), not just the executable.
 
-The script runs without a GUI (offscreen platform), so it is safe
-to run from the console/CI without a display.
+--- Custom Qt WebEngine build with proprietary codecs (H.264/AAC) ---
+Adjust the path below to match your setup (the default is C:\qt6install).
 """
 
+from PyInstaller.utils.hooks import collect_submodules
+import glob
 import os
-import sys
 
-os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+block_cipher = None
 
-try:
-    from PyQt6.QtCore import QUrl, QTimer
-    from PyQt6.QtWidgets import QApplication
-    from PyQt6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile
-except ImportError as e:
-    print(f"[FAIL] Failed to import PyQt6/PyQt6-WebEngine: {e}")
-    print("       Make sure you are using the correct venv "
-          "(for example: C:\\envs\\wat_pro_custom_qt\\Scripts\\activate)")
-    sys.exit(1)
+# Adjust this to the path from the build instructions
+# (C:\qt6install by default)
+QT6_CUSTOM_BIN = r"C:\qt6install\bin"
+QT6_CUSTOM_RESOURCES = r"C:\qt6install\resources"
+QT6_CUSTOM_LOCALES = r"C:\qt6install\translations\qtwebengine_locales"
+QT6_CUSTOM_PLUGINS = r"C:\qt6install\plugins"
 
-RESULTS = {}
+hiddenimports = collect_submodules("qt_test_tool")
 
+# Put translations/ and resources/ DIRECTLY in the bundle root (next to the
+# executable in --onedir), rather than under qt_test_tool/... — this is exactly
+# where core/config.py looks for them
+# (BUNDLE_DIR/translations, BUNDLE_DIR/resources). collect_data_files()
+# normally preserves the package structure (qt_test_tool/translations/...),
+# which does not match this location, so we handle it explicitly here.
+datas = []
+for f in glob.glob("qt_test_tool/translations/*.json"):
+    datas.append((f, "translations"))
+for f in glob.glob("qt_test_tool/resources/*"):
+    datas.append((f, "resources"))
 
-def mark(name: str, ok: bool, detail: str = ""):
-    RESULTS[name] = ok
-    status = "OK  " if ok else "FAIL"
-    line = f"[{status}] {name}"
-    if detail:
-        line += f" — {detail}"
-    print(line)
+# WebEngine resources/locales from the custom build — IMPORTANT: these must
+# also be placed under PyQt6/Qt6/..., not in the bundle root. Previously,
+# they were placed in the root ("resources"/"translations"), which (a) is not
+# where Qt actually looks for them (see the comment about custom_qt_binaries
+# below — the same reason: QLibraryInfo resolves paths relative to the
+# location of Qt6Core.dll, which is now PyQt6/Qt6/bin), and (b) conflicted
+# by name with the application's OWN resources/translations above (UI icons
+# and translations) — both were being written to the same "resources" folder
+# in the bundle root.
+datas.append((QT6_CUSTOM_RESOURCES, os.path.join("PyQt6", "Qt6", "resources")))
+datas.append((QT6_CUSTOM_LOCALES, os.path.join("PyQt6", "Qt6", "translations", "qtwebengine_locales")))
 
+# plugins/ (platforms/imageformats/iconengines, etc.) — without them, Qt
+# cannot even create a window ("Could not find the Qt platform plugin").
+# PyInstaller normally picks these up through its PyQt6 hook, but we have
+# already encountered cases where they were missing in a similar setup
+# (see chat history), so we explicitly include them instead of relying on
+# automatic detection.
+if os.path.isdir(QT6_CUSTOM_PLUGINS):
+    datas.append((QT6_CUSTOM_PLUGINS, os.path.join("PyQt6", "Qt6", "plugins")))
+else:
+    print(f"[wat_pro.spec] WARNING: directory {QT6_CUSTOM_PLUGINS} not found — "
+          f"Qt platform plugins will be taken from PyInstaller's automatic detection (standard versions)")
 
-def main():
-    app = QApplication(sys.argv)
-
-    profile = QWebEngineProfile.defaultProfile()
-    ua = profile.httpUserAgent()
-    mark("Module import / profile created", bool(ua), ua)
-
-    # --- Spellchecker ---------------------------------------------------
-    try:
-        profile.setSpellCheckEnabled(True)
-        profile.setSpellCheckLanguages(["en-US"])
-        enabled = profile.isSpellCheckEnabled()
-        langs = profile.spellCheckLanguages()
-        mark(
-            "Spellchecker can be enabled",
-            enabled and "en-US" in langs,
-            f"enabled={enabled}, languages={langs}",
-        )
-    except Exception as e:
-        mark("Spellchecker can be enabled", False, str(e))
-
-    page = QWebEnginePage(profile)
-
-    pending = {"codec": False, "webrtc": False, "pdf": False}
-    exit_timer = QTimer()
-    exit_timer.setSingleShot(True)
-    exit_timer.timeout.connect(app.quit)
-
-    def maybe_quit():
-        if all(pending.values()):
-            QTimer.singleShot(200, app.quit)
-
-    # --- H.264/AAC via canPlayType ---------------------------------
-    def check_codecs():
-        js = """
-        (function() {
-            var v = document.createElement('video');
-            return JSON.stringify({
-                h264: v.canPlayType('video/mp4; codecs="avc1.42E01E, mp4a.40.2"'),
-                vp9:  v.canPlayType('video/webm; codecs="vp9"')
-            });
-        })();
-        """
-        page.runJavaScript(js, on_codec_result)
-
-    def on_codec_result(result):
-        import json
-        try:
-            data = json.loads(result)
-            h264 = data.get("h264", "")
-            ok = h264 in ("probably", "maybe")
-            mark(
-                "H.264/AAC (proprietary codecs)",
-                ok,
-                f"canPlayType H.264 = '{h264}' (empty/'' means NOT enabled at build time)",
-            )
-        except Exception as e:
-            mark(
-                "H.264/AAC (proprietary codecs)",
-                False,
-                f"JS returned: {result!r} ({e})",
-            )
-        pending["codec"] = True
-        maybe_quit()
-
-    # --- WebRTC: API availability -----------------------------------------
-    def check_webrtc():
-        js = """
-        (function() {
-            return JSON.stringify({
-                hasGetUserMedia: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
-                hasRTCPeerConnection: typeof RTCPeerConnection !== 'undefined'
-            });
-        })();
-        """
-        page.runJavaScript(js, on_webrtc_result)
-
-    def on_webrtc_result(result):
-        import json
-        try:
-            data = json.loads(result)
-            ok = data.get("hasGetUserMedia") and data.get("hasRTCPeerConnection")
-            mark("WebRTC API available in page", bool(ok), str(data))
-        except Exception as e:
-            mark(
-                "WebRTC API available in page",
-                False,
-                f"JS returned: {result!r} ({e})",
-            )
-        pending["webrtc"] = True
-        maybe_quit()
-
-    # --- Printing/PDF ----------------------------------------------------
-    pdf_path = os.path.abspath("webengine_test_print.pdf")
-
-    def check_pdf():
-        page.printToPdf(pdf_path)
-
-    def on_pdf_finished(path, ok):
-        exists = os.path.exists(path) and os.path.getsize(path) > 0
-        mark(
-            "Printing/PDF (printToPdf)",
-            ok and exists,
-            f"file: {path} (exists={exists})",
-        )
-        pending["pdf"] = True
-        maybe_quit()
-
-    page.pdfPrintingFinished.connect(on_pdf_finished)
-
-    def on_load_finished(ok):
-        if not ok:
-            mark("Test page loading", False)
-            app.quit()
-            return
-        check_codecs()
-        check_webrtc()
-        check_pdf()
-
-    page.loadFinished.connect(on_load_finished)
-    page.setHtml(
-        "<html><body><h1>WebEngine self-test</h1></body></html>",
-        QUrl("about:blank"),
+# Custom DLLs/executables with proprietary codecs
+#
+# IMPORTANT: we take the ENTIRE bin\ directory, rather than manually selecting
+# individual files. The reason: a full QtWebEngine build pulls in MANY
+# dependencies besides Core/Gui/Widgets/WebEngineCore (Qt6Network,
+# Qt6Quick, Qt6Qml, Qt6WebChannel, Qt6Positioning, Qt6Pdf, possibly
+# OpenSSL libraries) — and if even one is missing, Windows reports
+# "DLL load failed... module could not be found" for the TOP-LEVEL import
+# (QtWebEngineCore), rather than identifying the actual missing file. Without
+# external tools (see below), it is practically impossible to determine
+# exactly which dependency is missing. It is simpler and more reliable to take
+# all .dll/.exe files from the same build together — this guarantees internal
+# consistency.
+#
+# IMPORTANT: the tuple format here is
+# (destination_name, source_file_path, "BINARY"),
+# NOT (source_file_path, destination_directory), as used by the CLI
+# --add-binary flag.
+# This is the low-level TOC format because we add the files directly to
+# a.binaries AFTER creating Analysis() (see below). The simpler 2-element
+# format would work through Analysis(binaries=[...]), but it performs its own
+# normalization, which prevents us from reliably replacing automatically
+# detected duplicates.
+if not os.path.isdir(QT6_CUSTOM_BIN):
+    raise FileNotFoundError(
+        f"Custom Qt build directory not found: {QT6_CUSTOM_BIN}\n"
+        f"Check QT6_CUSTOM_BIN at the beginning of wat_pro.spec"
     )
 
-    # Safety timeout in case of a hang
-    exit_timer.start(15000)
+custom_qt_binaries = []
+CUSTOM_QT_FILES = []  # populated below with the actual names of discovered files
 
-    app.exec()
+# IMPORTANT: destination is PyQt6/Qt6/bin/<filename>, NOT simply <filename>
+# (the bundle root). QtWebEngineProcess.exe itself looks for the process
+# executable at the exact nested path
+# "<exe folder>/_internal/PyQt6/Qt6/bin/QtWebEngineProcess.exe"
+# (the same layout used in site-packages). With a flat "." destination,
+# this check fails ("could not find Qt WebEngine Process") even if the file
+# physically exists in the bundle, simply in the wrong location.
+QT6_DEST_SUBDIR = os.path.join("PyQt6", "Qt6", "bin")
 
-    print("\n--- Summary ---")
-    total = len(RESULTS)
-    passed = sum(1 for v in RESULTS.values() if v)
-    print(f"Passed: {passed}/{total}")
+for filename in os.listdir(QT6_CUSTOM_BIN):
+    if not filename.lower().endswith((".dll", ".exe")):
+        continue
+    src_path = os.path.join(QT6_CUSTOM_BIN, filename)
+    if not os.path.isfile(src_path):
+        continue
+    CUSTOM_QT_FILES.append(filename)
+    custom_qt_binaries.append((os.path.join(QT6_DEST_SUBDIR, filename), src_path, "BINARY"))
 
-    if passed < total:
-        print("\nTips:")
-        if not RESULTS.get("H.264/AAC (proprietary codecs)", True):
-            print(" - H.264: make sure configure.bat included "
-                  "-webengine-proprietary-codecs, and that you are using "
-                  "your manually built Qt (where qmake), not PyQt6-Qt6 from pip.")
-        if not RESULTS.get("Spellchecker can be enabled", True):
-            print(" - Spellchecker: make sure -webengine-spellchecker was explicitly specified.")
-        if not RESULTS.get("WebRTC API available in page", True):
-            print(" - WebRTC: check the -webengine-webrtc flag in configure.bat.")
-        if not RESULTS.get("Printing/PDF (printToPdf)", True):
-            print(" - PDF: check the -webengine-printing-and-pdf flag.")
+if not custom_qt_binaries:
+    raise FileNotFoundError(
+        f"No .dll/.exe files found in {QT6_CUSTOM_BIN} — "
+        f"check the QT6_CUSTOM_BIN path"
+    )
 
-    sys.exit(0 if passed == total else 1)
+print(f"[wat_pro.spec] Taking {len(custom_qt_binaries)} files from custom Qt build: {QT6_CUSTOM_BIN}")
 
+a = Analysis(
+    ["run.py"],
+    pathex=[],
+    binaries=[],
+    datas=datas,
+    hiddenimports=hiddenimports,
+    hookspath=[],
+    hooksconfig={},
+    runtime_hooks=[],
+    excludes=[],
+    noarchive=False,
+    cipher=block_cipher,
+)
 
-if __name__ == "__main__":
-    main()
+# --- Important: remove Analysis() copies of these same DLLs ---
+# PyInstaller automatically finds Qt6Core.dll/Qt6WebEngineCore.dll and
+# similar files as dependencies of PyQt6 .pyd modules — these are the
+# STANDARD versions from the regular PyQt6-Qt6 pip package, without
+# proprietary codecs.
+#
+# If we simply ADD our own files through binaries=[...], there will be two
+# files with the same destination name. Which one actually ends up in the
+# build is not guaranteed (it depends on TOC merge order in the specific
+# PyInstaller version). Therefore, explicitly remove the automatically
+# detected copies of EXACTLY these files, leaving their destinations only
+# for our custom-built versions.
+_custom_names = {name.lower() for name in CUSTOM_QT_FILES}
+
+a.binaries = [
+    entry for entry in a.binaries
+    if os.path.basename(entry[0]).lower() not in _custom_names
+]
+
+a.binaries += custom_qt_binaries
+
+pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
+
+exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="WAT Pro",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=False,
+    icon="qt_test_tool/resources/icon.ico",
+)
+
+coll = COLLECT(
+    exe,
+    a.binaries,
+    a.zipfiles,
+    a.datas,
+    strip=False,
+    upx=False,
+    upx_exclude=[],
+    name="WAT Pro",
+)

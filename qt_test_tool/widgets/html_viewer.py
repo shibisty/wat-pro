@@ -1,7 +1,7 @@
 """
-Просмотрщик HTML-кода страницы: подсветка синтаксиса, номера строк,
-только для чтения (без редактирования). Плюс лёгкий pretty-printer для
-сериализованного HTML, который возвращает page.toHtml().
+Page HTML source viewer: syntax highlighting, line numbers, read-only
+(no editing). Plus a lightweight pretty-printer for the serialized HTML
+that page.toHtml() returns.
 """
 
 import re
@@ -35,11 +35,11 @@ def _extract_upe_selector(attrs_text: str):
 
 def pretty_print_html_with_spans(html: str):
     """
-    То же форматирование, что и pretty_print_html(), но дополнительно
-    возвращает словарь {upe_selector: (start_line, end_line)} — диапазон
-    строк (0-индексация в итоговом тексте) каждого элемента, помеченного
-    инструментатором дерева (см. web/dom_tree_js.py). Нужно, чтобы при
-    наведении на тег в текстовом виде подсвечивался весь блок целиком.
+    Same formatting as pretty_print_html(), but also returns a dict
+    {upe_selector: (start_line, end_line)} — the line range (0-indexed in
+    the resulting text) of each element tagged by the tree instrumenter
+    (see web/dom_tree_js.py). Needed so hovering over a tag in the text
+    view highlights the whole block.
     """
     if not html:
         return "", {}
@@ -55,10 +55,11 @@ def pretty_print_html_with_spans(html: str):
         if not stripped:
             continue
 
-        # Частый случай: весь элемент (открывающий тег + текст + закрывающий
-        # тег) уместился в одну строку целиком, напр. <p class="...">Hi</p> —
-        # его нужно распознать отдельно, иначе он не попадёт ни в открывающие,
-        # ни в закрывающие теги и просто выпадет из учёта span'ов.
+        # Common case: the whole element (opening tag + text + closing
+        # tag) fits on a single line, e.g. <p class="...">Hi</p> — it
+        # needs to be recognized separately, otherwise it won't match
+        # either the opening or closing tag pattern and would simply drop
+        # out of span tracking.
         inline_m = _INLINE_ELEMENT_RE.match(stripped)
         if inline_m:
             out.append("  " * indent + stripped)
@@ -100,16 +101,16 @@ def pretty_print_html_with_spans(html: str):
 
 def pretty_print_html(html: str) -> str:
     """
-    Простое форматирование сериализованного HTML (из page.toHtml()) для
-    удобного чтения в просмотрщике — не полноценный парсер, а лёгкая
-    расстановка переносов строк и отступов по вложенности тегов.
+    Simple formatting of serialized HTML (from page.toHtml()) for
+    convenient reading in the viewer — not a full parser, just lightweight
+    line-break and indentation placement based on tag nesting.
     """
     text, _spans = pretty_print_html_with_spans(html)
     return text
 
 
 class HtmlHighlighter(QSyntaxHighlighter):
-    """Простая подсветка HTML: теги, атрибуты, значения атрибутов, комментарии."""
+    """Simple HTML highlighting: tags, attributes, attribute values, comments."""
 
     def __init__(self, document, colors: dict):
         super().__init__(document)
@@ -136,29 +137,29 @@ class HtmlHighlighter(QSyntaxHighlighter):
             yield it.next()
 
     def highlightBlock(self, text):
-        # Комментарии <!-- ... --> (в пределах строки — упрощённо, но для
-        # просмотра разметки этого достаточно)
+        # Comments <!-- ... --> (within a line — simplified, but good
+        # enough for viewing markup)
         for match in self._iter_matches(r"&lt;!--.*?--&gt;|<!--.*?-->", text):
             self.setFormat(match.capturedStart(), match.capturedLength(), self.comment_format)
 
-        # Имена тегов: </? tagname
+        # Tag names: </? tagname
         for m in self._iter_matches(r"</?\s*([a-zA-Z0-9\-]+)", text):
             self.setFormat(m.capturedStart(1), m.capturedLength(1), self.tag_format)
 
-        # Атрибуты: name=
+        # Attributes: name=
         for m in self._iter_matches(r'([a-zA-Z_:][-a-zA-Z0-9_:.]*)(?==)', text):
             self.setFormat(m.capturedStart(1), m.capturedLength(1), self.attr_format)
 
-        # Значения атрибутов в кавычках
+        # Quoted attribute values
         for m in self._iter_matches(r'"[^"]*"|\'[^\']*\'', text):
             self.setFormat(m.capturedStart(), m.capturedLength(), self.value_format)
 
 
 class HtmlCodeViewer(QPlainTextEdit):
-    """QPlainTextEdit только для чтения, с полосой номеров строк слева и
-    подсветкой всего тега при наведении (см. set_spans/hoveredSelectorChanged)."""
+    """A read-only QPlainTextEdit with a line-number gutter on the left
+    and full-tag highlighting on hover (see set_spans/hoveredSelectorChanged)."""
 
-    hoveredSelectorChanged = pyqtSignal(str)  # пустая строка = снять подсветку
+    hoveredSelectorChanged = pyqtSignal(str)  # empty string = clear the highlight
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -183,7 +184,7 @@ class HtmlCodeViewer(QPlainTextEdit):
         self._hovered_selector = None
 
     def set_spans(self, spans: dict):
-        """spans: {selector: (start_line, end_line)} — из pretty_print_html_with_spans()."""
+        """spans: {selector: (start_line, end_line)} — from pretty_print_html_with_spans()."""
         self._spans = [(s, e, sel) for sel, (s, e) in spans.items()]
         self._hovered_selector = None
         self._update_hover_selection()

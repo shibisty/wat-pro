@@ -1,29 +1,30 @@
 """
-Управление сценариями: создание/выбор (JSON-файлы — удобно передавать
-другим пользователям), редактирование шагов и запуск через ScenarioRunner.
+Scenario management: create/select (JSON files — easy to hand off to
+other users), edit steps and run via ScenarioRunner.
 
-Поведение "живое": выбор сценария в списке сразу его загружает (без
-отдельной кнопки), а любое изменение (имя, URL, размер окна, шаги) сразу
-сохраняется на диск (без отдельной кнопки) — см. _autosave(). Явные
-кнопки остались только там, где нужна осознанная развилка: создать
-новый / переименовать / удалить.
+"Live" behavior: picking a scenario in the list loads it immediately (no
+separate button), and any change (name, URL, window size, steps) is
+autosaved to disk immediately (no separate button) — see _autosave().
+Explicit buttons remain only where a deliberate fork is needed: create
+new / rename / delete.
 
-Сценарий хранит не только шаги, но и стартовый URL, размер окна браузера
-(width/height) и зум — чтобы можно было один раз настроить тест под
-мобильный/планшет/десктоп и оно запоминалось.
+A scenario stores not just its steps, but also the start URL, browser
+window size (width/height) and zoom — so you can configure a test for
+mobile/tablet/desktop once and have it remembered.
 
-Шаги с collect=True после выполнения пишут результат в collected_data;
-шаги с notify=True отправляют e-mail уведомление прямо посреди сценария
-(независимо от финального успеха/неудачи всего сценария).
+Steps with collect=True write their result to collected_data after
+running; steps with notify=True send an e-mail notification right in
+the middle of the scenario (independent of the overall scenario's final
+success/failure).
 
-Каждый запуск сценария (play_scenario) стартует в СВЕЖЕЙ off-the-record
-сессии (см. _start_fresh_session) — отдельный QWebEngineProfile без куки/
-кэша/localStorage/IndexedDB от прошлых запусков. Это нужно, например,
-когда сценарий кладёт товар в корзину: без изоляции сессии повторный
-прогон видел бы уже занятую корзину от предыдущего раза и ломался бы.
-После завершения сценария использованная сессия тоже подчищается
-(куки/кэш), а следующий запуск в любом случае получит совсем новый
-профиль.
+Every scenario run (play_scenario) starts in a FRESH off-the-record
+session (see _start_fresh_session) — a separate QWebEngineProfile with no
+cookies/cache/localStorage/IndexedDB from previous runs. This matters,
+for example, when a scenario adds an item to a cart: without session
+isolation, a repeat run would see the cart already occupied from last
+time and break. After the scenario finishes, the used session is also
+cleaned up (cookies/cache), and the next run gets a brand new profile
+regardless.
 """
 
 import copy
@@ -37,7 +38,7 @@ from ...core.scenario_runner import ScenarioRunner
 from ...core.i18n import ACCEPT_LANGUAGE_MAP, NAVIGATOR_LOCALE_MAP
 from ...data import scenarios_repo, collected_data_repo
 from ...notifications import email_notifier
-from ...widgets.dialogs import StepDialog
+from ...widgets.dialogs import StepDialog, ScenarioDialog
 from ...web.page import LoggingWebPage, configure_profile
 
 
@@ -45,23 +46,28 @@ class ScenarioMixin:
     def _refresh_scenario_list(self):
         self.scenario_combo.blockSignals(True)
         self.scenario_combo.clear()
+        self.scenario_combo.addItem(self.t("placeholder_choose_scenario"), None)
         for row in scenarios_repo.list_scenarios():
             self.scenario_combo.addItem(row["name"], row["id"])
         self.scenario_combo.blockSignals(False)
 
     def new_scenario(self):
-        name, ok = QInputDialog.getText(
-            self, self.t("dialog_new_scenario_title"), self.t("dialog_new_scenario_label")
+        dlg = ScenarioDialog(
+            width=self.width_spin.value(), height=self.height_spin.value(),
+            tr=self.t, parent=self,
         )
-        if not (ok and name.strip()):
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        name = name.strip()
-        # создаём запись сразу — без этого автосохранению не к чему привязаться
+        data = dlg.get_data()
+        if not data["name"]:
+            self.log(self.t("log_select_scenario_first"), "error")
+            return
+        # create the record right away — autosave has nothing to attach to otherwise
         self.current_scenario_id = scenarios_repo.create_scenario(
-            name, [], url="", width=self.width_spin.value(), height=self.height_spin.value(),
+            data["name"], [], url=data["url"], width=data["width"], height=data["height"],
             zoom_auto=True, zoom_percent=100,
         )
-        self.current_scenario_name = name
+        self.current_scenario_name = data["name"]
         self.steps = []
         self._refresh_steps_list()
         self._refresh_scenario_list()
@@ -70,10 +76,19 @@ class ScenarioMixin:
             self.scenario_combo.blockSignals(True)
             self.scenario_combo.setCurrentIndex(idx)
             self.scenario_combo.blockSignals(False)
+
+        # apply the start URL/size to the current browser session right
+        # away, so what was set in the dialog is visible on the live screen
+        self.width_spin.setValue(data["width"])
+        self.height_spin.setValue(data["height"])
+        self.address_edit.setText(data["url"])
+        if data["url"]:
+            self.navigate()
+
         self.log(f"Создан новый сценарий: {self.current_scenario_name}")
 
     def on_scenario_selected(self, index):
-        """Автозагрузка при выборе в списке — отдельной кнопки «Загрузить» больше нет."""
+        """Auto-load on list selection — there's no separate "Load" button anymore."""
         if index < 0:
             return
         scenario_id = self.scenario_combo.currentData()
@@ -91,7 +106,7 @@ class ScenarioMixin:
         self.steps = data["steps"]
         self._refresh_steps_list()
 
-        # восстанавливаем размер окна браузера и зум, сохранённые со сценарием
+        # restore the browser window size and zoom saved with the scenario
         self.width_spin.setValue(data.get("width", 1366))
         self.height_spin.setValue(data.get("height", 768))
         if data.get("zoom_auto", True):
@@ -107,18 +122,48 @@ class ScenarioMixin:
         self.log(f"Загружен сценарий: {self.current_scenario_name}")
 
     def edit_scenario_name(self):
-        """Переименование текущего сценария (id/файл сохраняются, меняется только имя)."""
+        """Edit the current scenario: name + start URL + start size
+        (id/file stay the same, only the content changes). Saves url/
+        width/height explicitly here — this is the ONE place they're
+        meant to change, via the dialog, not via the general _autosave()
+        (which only ever touches steps — see its docstring)."""
         if not self.current_scenario_name:
-            self.log("Сначала выберите или создайте сценарий", "error")
+            self.log(self.t("log_select_scenario_first"), "error")
             return
-        name, ok = QInputDialog.getText(
-            self, self.t("dialog_rename_scenario_title"), self.t("dialog_rename_scenario_label"),
-            text=self.current_scenario_name,
+        dlg = ScenarioDialog(
+            name=self.current_scenario_name,
+            url=self.address_edit.text(),
+            width=self.width_spin.value(),
+            height=self.height_spin.value(),
+            tr=self.t, parent=self,
         )
-        if not (ok and name.strip()):
+        if dlg.exec() != QDialog.DialogCode.Accepted:
             return
-        self.current_scenario_name = name.strip()
-        self._autosave()
+        data = dlg.get_data()
+        if not data["name"]:
+            return
+        self.current_scenario_name = data["name"]
+        self.width_spin.setValue(data["width"])
+        self.height_spin.setValue(data["height"])
+        self.address_edit.setText(data["url"])
+
+        existing = scenarios_repo.get_scenario(self.current_scenario_id) if self.current_scenario_id else None
+        zoom_auto = existing.get("zoom_auto", True) if existing else True
+        zoom_percent = existing.get("zoom_percent", 100) if existing else 100
+        self.current_scenario_id = scenarios_repo.upsert_scenario_by_name(
+            data["name"], self.steps, data["url"],
+            width=data["width"], height=data["height"],
+            zoom_auto=zoom_auto, zoom_percent=zoom_percent,
+        )
+        self._refresh_scenario_list()
+        idx = self.scenario_combo.findData(self.current_scenario_id)
+        if idx >= 0:
+            self.scenario_combo.blockSignals(True)
+            self.scenario_combo.setCurrentIndex(idx)
+            self.scenario_combo.blockSignals(False)
+
+        if data["url"]:
+            self.navigate()
 
     def delete_scenario(self):
         if self.current_scenario_id is None:
@@ -141,23 +186,80 @@ class ScenarioMixin:
         self._refresh_scenario_list()
         if self.scenario_combo.count() > 0:
             self.scenario_combo.setCurrentIndex(0)
-            # activated не всплывает при программной установке индекса —
-            # подгружаем явно
+            # activated doesn't fire on a programmatic index change —
+            # load explicitly
             self._load_scenario(self.scenario_combo.currentData())
 
-    def _autosave(self):
-        """Тихое сохранение без диалогов/лишних логов — вызывается после
-        любого изменения (шаги, имя, URL, размер), если у сценария уже
-        есть имя (иначе просто нечего/некуда сохранять)."""
+    def _save_live_size(self):
+        """
+        Explicitly saves ONLY width/height, whenever the user directly
+        changes them via the size fields/preset in nav_bar — a separate
+        path from _autosave() (which only ever touches steps). Resizing
+        is itself a deliberate user action on these specific fields, so
+        it should persist on its own, independent of whatever else is
+        going on with the scenario's steps (see _autosave()'s docstring
+        for why THAT one deliberately doesn't touch width/height).
+        """
         if not self.current_scenario_name:
             return
-        url = self.address_edit.text().strip()
-        zoom_text = "".join(ch for ch in self.zoom_combo.currentText() if ch.isdigit())
-        zoom_percent = int(zoom_text) if zoom_text else 100
+        existing = None
+        if self.current_scenario_id is not None:
+            existing = scenarios_repo.get_scenario(self.current_scenario_id)
+        if existing is None:
+            existing = scenarios_repo.get_scenario_by_name(self.current_scenario_name)
+        if existing is None:
+            return  # nothing to attach this size change to yet
+
+        self.current_scenario_id = scenarios_repo.upsert_scenario_by_name(
+            self.current_scenario_name, existing.get("steps", []), existing.get("url", ""),
+            width=self.width_spin.value(), height=self.height_spin.value(),
+            zoom_auto=existing.get("zoom_auto", True), zoom_percent=existing.get("zoom_percent", 100),
+        )
+
+    def _autosave(self):
+        """
+        Silent save, no dialogs/extra logs — called after any change to
+        the STEPS list (add/edit/delete/move/undo/record), provided the
+        scenario already has a name (otherwise there's simply
+        nothing/nowhere to save to).
+
+        IMPORTANT: only `steps` gets updated here. url/width/height/zoom
+        are set explicitly, once, via the scenario create/edit dialog
+        (see new_scenario()/edit_scenario_name()) — this deliberately does
+        NOT pull them from the live nav_bar fields. Without this, just
+        navigating somewhere to poke around, or resizing the window for a
+        quick look, would silently overwrite the scenario's configured
+        start state on every step change.
+        """
+        if not self.current_scenario_name:
+            return
+
+        existing = None
+        if self.current_scenario_id is not None:
+            existing = scenarios_repo.get_scenario(self.current_scenario_id)
+        if existing is None:
+            existing = scenarios_repo.get_scenario_by_name(self.current_scenario_name)
+
+        if existing is not None:
+            url = existing.get("url", "")
+            width = existing.get("width", 1366)
+            height = existing.get("height", 768)
+            zoom_auto = existing.get("zoom_auto", True)
+            zoom_percent = existing.get("zoom_percent", 100)
+        else:
+            # a genuinely new scenario that somehow isn't on disk yet —
+            # fall back to whatever the live fields currently show, just
+            # this once, so there's at least something to write
+            url = self.address_edit.text().strip()
+            width = self.width_spin.value()
+            height = self.height_spin.value()
+            zoom_auto = self.zoom_auto
+            zoom_percent = 100
+
         self.current_scenario_id = scenarios_repo.upsert_scenario_by_name(
             self.current_scenario_name, self.steps, url,
-            width=self.width_spin.value(), height=self.height_spin.value(),
-            zoom_auto=self.zoom_auto, zoom_percent=zoom_percent,
+            width=width, height=height,
+            zoom_auto=zoom_auto, zoom_percent=zoom_percent,
         )
         self._refresh_scenario_list()
         idx = self.scenario_combo.findData(self.current_scenario_id)
@@ -166,7 +268,7 @@ class ScenarioMixin:
             self.scenario_combo.setCurrentIndex(idx)
             self.scenario_combo.blockSignals(False)
 
-    # ---------------- Шаги сценария ----------------
+    # ---------------- Scenario steps ----------------
 
     def _refresh_steps_list(self):
         self.steps_list.clear()
@@ -186,7 +288,7 @@ class ScenarioMixin:
             self.steps_list.addItem(QListWidgetItem(f"{i + 1}. {preview}{marks}"))
 
     def _push_undo(self):
-        """Снимок текущего списка шагов перед изменением — для Ctrl+Z."""
+        """Snapshot of the current step list before a change — for Ctrl+Z."""
         if not hasattr(self, "_undo_stack"):
             self._undo_stack = []
         self._undo_stack.append(copy.deepcopy(self.steps))
@@ -225,8 +327,8 @@ class ScenarioMixin:
             self._autosave()
 
     def delete_step(self):
-        """Удаляет ВСЕ выделенные шаги (ExtendedSelection — Ctrl/Shift для
-        множественного выбора). Работает и по кнопке 🗑️, и по клавише Delete."""
+        """Deletes ALL selected steps (ExtendedSelection — Ctrl/Shift for
+        multi-select). Works both via the 🗑️ button and the Delete key."""
         rows = sorted({index.row() for index in self.steps_list.selectedIndexes()}, reverse=True)
         if not rows:
             return
@@ -247,18 +349,31 @@ class ScenarioMixin:
         self.steps_list.setCurrentRow(new_row)
         self._autosave()
 
-    # ---------------- Свежая (off-the-record) сессия для прогона ----------------
+    def _on_bridge_insert(self, data):
+        """
+        InsertToDB(data) from the page's JS — see web/bridge.py. Unlike
+        the 💾 collect flag on a step (one value per step, only after it
+        finishes), this can be called any number of times from anywhere
+        in the step's JS code, at any moment.
+        """
+        if getattr(self, "current_scenario_id", None) is None:
+            self.log("InsertToDB: сценарий ещё не назван — данные не записаны в БД.", "error")
+            return
+        collected_data_repo.insert_row(self.db_conn, self.current_scenario_id, data)
+        self.log(f"InsertToDB: записано в БД ({len(data)} симв.)", "ok")
+
+    # ---------------- Fresh (off-the-record) session for a run ----------------
 
     def _start_fresh_session(self):
         """
-        Создаёт новый анонимный (off-the-record) профиль WebEngine —
-        отдельные куки/кэш/localStorage/IndexedDB, полностью изолированные
-        от предыдущего состояния (например, товара в корзине от прошлого
-        прогона). Подменяет self.web_view.page() на страницу этого нового
-        профиля и пересоздаёт ScenarioRunner (он был привязан к старой
-        странице — сигналы loadStarted/loadFinished слушали бы не то).
+        Creates a new anonymous (off-the-record) WebEngine profile —
+        separate cookies/cache/localStorage/IndexedDB, fully isolated from
+        previous state (e.g. an item left in the cart from the last run).
+        Swaps self.web_view.page() for a page on this new profile and
+        recreates ScenarioRunner (it was bound to the old page — its
+        loadStarted/loadFinished signals would be listening to the wrong one).
         """
-        profile = QWebEngineProfile(self)  # анонимный конструктор = off-the-record, в памяти
+        profile = QWebEngineProfile(self)  # anonymous constructor = off-the-record, in-memory
         configure_profile(
             profile,
             self.app.interceptor,
@@ -268,28 +383,30 @@ class ScenarioMixin:
         )
         new_page = LoggingWebPage(profile, self.web_view, self._on_page_console_message)
         new_page.loadFinished.connect(self._on_page_load_finished)
+        new_page.bridge.dataInserted.connect(self._on_bridge_insert)
         self.web_view.setPage(new_page)
 
-        # держим ссылки на объекты — иначе Python/Qt могут собрать их
-        # раньше времени, пока сценарий ещё выполняется
+        # keep references to these objects — otherwise Python/Qt might
+        # garbage-collect them early, while the scenario is still running
         self._session_profile = profile
         self._session_page = new_page
 
-        # раннер был привязан к старой странице — пересоздаём
+        # the runner was bound to the old page — recreate it
         self._scenario_runner = ScenarioRunner(new_page)
 
     def _cleanup_session(self):
-        """Подчистить куки/кэш использованной сессии — вызывается по
-        завершении сценария (в дополнение к тому, что следующий запуск
-        всё равно получит совсем новый профиль)."""
+        """Clean up cookies/cache of the used session — called when the
+        scenario finishes (on top of the fact that the next run gets a
+        brand new profile regardless)."""
         if hasattr(self, "_session_profile"):
             self._session_profile.cookieStore().deleteAllCookies()
             self._session_profile.clearHttpCache()
 
-    # ---------------- Воспроизведение сценария ----------------
+    # ---------------- Playing a scenario ----------------
     def play_scenario(self):
-        """Всегда полный перезапуск: свежая (off-the-record) сессия, с шага 1.
-        Для продолжения с места остановки — см. pause_scenario()/resume_scenario()."""
+        """Always a full restart: a fresh (off-the-record) session, from
+        step 1. To resume from where it stopped — see
+        pause_scenario()/resume_scenario()."""
         if hasattr(self, "_scenario_runner") and self._scenario_runner.running:
             self.log("Сценарий уже выполняется", "error")
             return
@@ -315,19 +432,19 @@ class ScenarioMixin:
             self._session_page.loadFinished.connect(start_after_load)
             self.web_view.load(QUrl(url))
         else:
-            # URL не задан — сразу переходим к прогону (пустая страница и так «загружена»)
+            # no URL set — go straight to running (an empty page is already "loaded")
             QTimer.singleShot(0, start_after_load)
 
     def pause_scenario(self):
-        """Остановить после текущего шага, БЕЗ очистки сессии — страница
-        остаётся как есть, можно посмотреть состояние и продолжить."""
+        """Stop after the current step, WITHOUT cleaning up the session —
+        the page stays as is, so you can inspect the state and continue."""
         if not hasattr(self, "_scenario_runner") or not self._scenario_runner.running:
             return
         self._scenario_runner.request_pause()
-        self.pause_btn.setEnabled(False)  # до фактической остановки (после текущего шага)
+        self.pause_btn.setEnabled(False)  # until it actually stops (after the current step)
 
     def resume_scenario(self):
-        """Продолжить с места остановки — в ТОЙ ЖЕ сессии, без новой навигации."""
+        """Continue from where it stopped — in the SAME session, no new navigation."""
         if not hasattr(self, "_scenario_runner") or self._scenario_runner.paused_at_index is None:
             return
         resume_from = self._scenario_runner.paused_at_index
@@ -344,6 +461,8 @@ class ScenarioMixin:
 
     def _run_loaded_scenario(self, resume_from=0):
         def on_step_result(index, success, result):
+            if not self._web_view_alive():
+                return
             item = self.steps_list.item(index)
             if item:
                 c = THEMES[self.theme]
@@ -386,4 +505,3 @@ class ScenarioMixin:
             resume_from=resume_from,
         )
         self._update_run_controls()
-        

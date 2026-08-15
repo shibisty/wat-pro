@@ -1,7 +1,7 @@
 """
-Навигация браузера, диалог заголовков, live HTML-источник страницы
-(код + дерево), перехват console.* сообщений со страницы, рандомайзер
-форм и запись действий пользователя в шаги сценария.
+Browser navigation, headers dialog, live page HTML source (code + tree),
+intercepting the page's console.* messages, form randomizer, and
+recording user actions into scenario steps.
 """
 
 import base64
@@ -34,7 +34,7 @@ class BrowserMixin:
             self.interceptor.headers = dlg.get_headers()
             self.log(self.t("log_headers_updated").format(headers=self.interceptor.headers))
 
-    # ---------------- Навигация ----------------
+    # ---------------- Navigation ----------------
 
     def navigate(self):
         url = self.address_edit.text().strip()
@@ -44,25 +44,25 @@ class BrowserMixin:
             url = "https://" + url
         self.web_view.load(QUrl(url))
         self.log(self.t("log_navigating").format(url=url))
-        self._autosave()
 
-    # ---------------- HTML: код + дерево (live, для SPA) ----------------
+    # ---------------- HTML: code + tree (live, for SPAs) ----------------
 
     def _web_view_alive(self) -> bool:
         """
-        Все методы ниже вызываются АСИНХРОННО (колбэк от runJavaScript
-        приходит позже, из цикла событий Qt) — за это время виджет
-        web_view вполне может быть уже удалён (закрыли вкладку/окно,
-        подменили страницу через _start_fresh_session и т.п.). Без этой
-        проверки в такой момент ловим RuntimeError: "wrapped C/C++ object
-        ... has been deleted" — Python-обёртка ещё жива, а C++-объект
-        за ней уже нет.
+        All the methods below are called ASYNCHRONOUSLY (the
+        runJavaScript callback arrives later, from Qt's event loop) — by
+        that time the web_view widget may well have already been deleted
+        (a tab/window was closed, the page was swapped via
+        _start_fresh_session, etc). Without this check we'd hit
+        RuntimeError: "wrapped C/C++ object ... has been deleted" at that
+        point — the Python wrapper is still alive, but the C++ object
+        behind it is already gone.
         """
         try:
             from PyQt6 import sip
             return not sip.isdeleted(self.web_view)
         except ImportError:
-            return True  # sip недоступен — не можем проверить, считаем живым
+            return True  # sip unavailable — can't check, assume alive
         except RuntimeError:
             return False
 
@@ -72,15 +72,15 @@ class BrowserMixin:
         self._last_html_source = None
         self.refresh_html_panels()
         if getattr(self, "recording", False):
-            # слушатели записи не переживают навигацию — переустанавливаем
+            # recording listeners don't survive navigation — reinstall them
             self.web_view.page().runJavaScript(RECORDER_INSTALL_JS)
 
     def _poll_html_source(self):
         if not self._web_view_alive():
             return
-        # Сначала помечаем узлы уникальными классами и строим дерево —
-        # это же инструментирование делает последующий toHtml() пригодным
-        # для точной подсветки тега целиком во вкладке "Код".
+        # First tag nodes with unique classes and build the tree — this
+        # same instrumentation is what makes the subsequent toHtml() usable
+        # for precisely highlighting the whole tag in the "Code" tab.
         self.web_view.page().runJavaScript(DOM_TREE_JS, self._on_tree_captured)
 
     def _on_tree_captured(self, tree_json):
@@ -111,7 +111,7 @@ class BrowserMixin:
         scrollbar.setValue(min(old_value, scrollbar.maximum()))
 
     def _on_hover_selector_changed(self, selector: str):
-        """Подсвечивает элемент в браузере при наведении в коде/дереве (или снимает подсветку)."""
+        """Highlights the element in the browser on hover in the code/tree (or clears the highlight)."""
         if not self._web_view_alive():
             return
         self.web_view.page().runJavaScript(build_highlight_script(selector or None))
@@ -147,24 +147,24 @@ class BrowserMixin:
         self.web_view.page().runJavaScript(RESOURCE_ENTRIES_JS, on_result)
 
     def refresh_html_panels(self):
-        """Единая точка обновления всех 4 вкладок HTML-панели (Код/Дерево/
-        localStorage/Кэш) — вызывается и по кнопке "Обновить", и один раз
-        сразу после навигации на новую страницу."""
+        """Single point that refreshes all 4 tabs of the HTML panel
+        (Code/Tree/localStorage/Cache) — called both by the "Refresh"
+        button and once right after navigating to a new page."""
         self._poll_html_source()
         self._poll_local_storage()
         self._poll_cache_files()
 
-    # ---------------- Вкладка "Кэш": ПКМ → сохранить/проводник/свойства ----------------
+    # ---------------- "Cache" tab: right-click -> save/explorer/properties ----------------
     #
-    # Честная оговорка: вкладка "Кэш" показывает метаданные из Resource
-    # Timing API браузера, а не прямое содержимое дискового кэша Chromium
-    # (тот в бинарном формате, без публичного API для чтения — см.
-    # web/inspect_js.py). Поэтому "Открыть в проводнике"/"Свойства"
-    # работают не с уже лежащим где-то файлом, а СКАЧИВАЮТ содержимое
-    # заново по тому же URL и сохраняют во временную папку — тогда
-    # проводник/свойства открывают уже реальный файл на диске. Для чужих
-    # доменов без CORS-заголовков скачать тело не получится — будет
-    # понятная ошибка в логе, а не падение.
+    # Honest disclaimer: the "Cache" tab shows metadata from the browser's
+    # Resource Timing API, not the actual contents of Chromium's disk
+    # cache (that's a binary format with no public read API — see
+    # web/inspect_js.py). So "Open in Explorer"/"Properties" don't act on
+    # a file that's already sitting somewhere — they RE-DOWNLOAD the
+    # content from the same URL and save it to a temp folder, and only
+    # then does Explorer/Properties open a real file on disk. For
+    # third-party domains without CORS headers, downloading the body
+    # won't work — you'll get a clear error in the log instead of a crash.
 
     def _on_cache_context_menu(self, pos):
         item = self.cache_files_view.itemAt(pos)
@@ -214,9 +214,9 @@ class BrowserMixin:
         return os.path.join(folder, suggested_name or "download")
 
     def _fetch_and_save(self, url, suggested_name, dest_path, on_saved):
-        """Скачивает ресурс заново по URL (поллингом — runJavaScript Promise
-        не дожидается, см. inspect_js.py) и сохраняет в dest_path; по
-        завершении вызывает on_saved(path), если он задан."""
+        """Re-downloads the resource by URL (by polling — runJavaScript
+        doesn't wait for a Promise, see inspect_js.py) and saves it to
+        dest_path; calls on_saved(path) when done, if one was given."""
         self.log(self.t("log_fetching_resource").format(name=suggested_name))
         self.web_view.page().runJavaScript(build_fetch_resource_start_script(url))
         self._poll_fetch_resource(suggested_name, dest_path, on_saved, 0)
@@ -275,7 +275,7 @@ class BrowserMixin:
         except Exception as e:
             self.log(self.t("log_fetch_failed").format(name=os.path.basename(path), error=str(e)), "error")
 
-    # ---------------- Запись действий в сценарий ----------------
+    # ---------------- Recording actions into the scenario ----------------
 
     def toggle_recording(self):
         if getattr(self, "recording", False):
@@ -301,7 +301,7 @@ class BrowserMixin:
         self.recording = False
         if hasattr(self, "record_poll_timer"):
             self.record_poll_timer.stop()
-        self._poll_recorded_actions()  # забрать то, что накопилось перед остановкой
+        self._poll_recorded_actions()  # grab whatever accumulated before stopping
         self.record_btn.setText("⏺")
         self.record_btn.setProperty("recording", "false")
         self.record_btn.style().unpolish(self.record_btn)
@@ -334,8 +334,8 @@ class BrowserMixin:
         our_level = level_map.get(level, "info")
         source_short = source_id.rsplit("/", 1)[-1] if source_id else ""
         location = f"  ({source_short}:{line_number})" if source_short else ""
-        # само сообщение — вывод console.* самой веб-страницы (её собственный
-        # текст, не наш), поэтому не переводим содержимое, только префикс
+        # the message itself is the web page's own console.* output (its
+        # own text, not ours), so we don't translate the content, only the prefix
         self.log(f"[console] {message}{location}", our_level)
 
     def randomize_form(self):

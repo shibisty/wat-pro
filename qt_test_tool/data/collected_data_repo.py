@@ -1,9 +1,9 @@
 """
-CRUD для данных, которые сценарии сохраняют через шаг типа "collect"
-(row_id, scenario_id, content_text, created_at). scenario_id — текстовый
-UUID сценария (сценарии теперь JSON-файлы, не таблица в этой БД), поэтому
-имя сценария подтягивается отдельным запросом к scenarios_repo, а не SQL
-JOIN'ом.
+CRUD for data that scenarios save via a "collect" step
+(row_id, scenario_id, content_text, created_at). scenario_id is the
+scenario's text UUID (scenarios are now JSON files, not a table in this
+DB), so the scenario name is fetched via a separate call to
+scenarios_repo, not a SQL JOIN.
 """
 
 from . import scenarios_repo

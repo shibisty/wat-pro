@@ -1,7 +1,7 @@
 """
-Определение системной темы (светлая/тёмная) и покраска системной рамки
-окна (заголовок, кнопки свернуть/закрыть) под тему — только Windows,
-через DWM API.
+Detecting the system theme (light/dark) and coloring the window's native
+frame (title bar, minimize/close buttons) to match — Windows only, via
+the DWM API.
 """
 
 import platform
@@ -10,10 +10,10 @@ import subprocess
 
 def detect_system_theme() -> str:
     """
-    Определяет текущую системную тему (светлая/тёмная).
-    Windows — через реестр, macOS — через `defaults read`,
-    Linux — через `gsettings` (GNOME/Cinnamon и совместимые).
-    Если определить не удалось — светлая тема по умолчанию.
+    Detects the current system theme (light/dark).
+    Windows — via the registry, macOS — via `defaults read`,
+    Linux — via `gsettings` (GNOME/Cinnamon and compatible).
+    If it can't be detected — light theme is the default.
     """
     system = platform.system()
     try:
@@ -46,10 +46,10 @@ def detect_system_theme() -> str:
 
 def apply_native_titlebar_theme(window, dark: bool):
     """
-    Красит системную рамку окна (заголовок, кнопки свернуть/закрыть) в тёмный
-    цвет на Windows 10 (1809+) / Windows 11 через DWM API.
-    На других ОС или старых сборках Windows тихо ничего не делает —
-    системную рамку там штатными средствами Qt перекрасить нельзя.
+    Colors the window's native frame (title bar, minimize/close buttons)
+    dark on Windows 10 (1809+) / Windows 11 via the DWM API.
+    On other OSes or older Windows builds it silently does nothing — the
+    native frame can't be recolored there with Qt's own tools.
     """
     if platform.system() != "Windows":
         return
@@ -57,7 +57,7 @@ def apply_native_titlebar_theme(window, dark: bool):
         import ctypes
         hwnd = int(window.winId())
         value = ctypes.c_int(1 if dark else 0)
-        # 20 — актуальный атрибут (Win10 1903+/Win11), 19 — старые сборки Win10.
+        # 20 — the current attribute (Win10 1903+/Win11), 19 — older Win10 builds.
         for attribute in (20, 19):
             ctypes.windll.dwmapi.DwmSetWindowAttribute(
                 hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)

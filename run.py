@@ -1,11 +1,12 @@
 """
-Запуск приложения: python run.py
+Run the application: python run.py
 
-Вся логика — в пакете qt_test_tool/, это просто удобная точка входа,
-чтобы не набирать `python -m qt_test_tool.main`.
+All logic is contained in the qt_test_tool/ package. This is simply a
+convenient entry point so you don't have to type `python -m qt_test_tool.main`.
 """
 
 from qt_test_tool.main import main
 
 if __name__ == "__main__":
     main()
+    

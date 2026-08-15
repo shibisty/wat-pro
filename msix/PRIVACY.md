@@ -1,36 +1,38 @@
-# Политика конфиденциальности WAT Pro
+# WAT Pro Privacy Policy
 
-_Черновик — адаптируйте под реальную практику перед публикацией. Microsoft
-Store требует действующую политику конфиденциальности (ссылку на неё) для
-любого приложения, которое обращается к сети или хранит учётные данные —
-у нас это оба случая (SMTP, произвольные веб-страницы)._
+_Draft — adapt this to your actual practices before publication. Microsoft
+Store requires a valid privacy policy (and a link to it) for any application
+that accesses the network or stores credentials — our application does both
+(SMTP, arbitrary web pages)._
 
-## Что делает приложение
+## What the Application Does
 
-WAT Pro — локальный инструмент для тестирования и автоматизации
-веб-страниц. Все сценарии, собранные данные и настройки хранятся
-**локально на вашем компьютере** (файлы `.json`, SQLite-база рядом с
-приложением или в `%LOCALAPPDATA%\WAT Pro`).
+WAT Pro is a local tool for testing and automating web pages. All scripts,
+collected data, and settings are stored **locally on your computer** (`.json`
+files, an SQLite database next to the application, or in
+`%LOCALAPPDATA%\WAT Pro`).
 
-## Какие данные обрабатываются
+## What Data Is Processed
 
-- **Пароль от SMTP** (если вы настраиваете e-mail уведомления) хранится
-  через системное хранилище Windows (Credential Manager), не в открытом
-  виде и не передаётся разработчику приложения.
-- **Содержимое сценариев и собранные данные** остаются локально; никуда
-  за пределы вашего компьютера не отправляются, за исключением случаев,
-  когда вы сами настроили e-mail-уведомление — тогда письмо уходит через
-  указанный вами SMTP-сервер напрямую, минуя разработчика.
-- **Посещаемые страницы**: приложение — браузерная обвязка; оно
-  переходит по адресам, которые вы указываете сами (в сценарии или
-  адресной строке), как обычный браузер.
+- **SMTP password** (if you configure e-mail notifications) is stored using
+  the Windows system storage (Credential Manager), not in plain text and is
+  not transmitted to the application developer.
+- **Script contents and collected data** remain local; they are not sent
+  outside your computer, except when you configure an e-mail notification
+  yourself — in that case, the e-mail is sent directly through the SMTP
+  server you specify, without going through the developer.
+- **Visited pages**: the application is a browser wrapper; it navigates to
+  the URLs you specify yourself (in a script or in the address bar), just
+  like a regular browser.
 
-## Что НЕ делает приложение
+## What the Application Does NOT Do
 
-- Не собирает и не передаёт данные разработчику или третьим лицам.
-- Не использует аналитику/телеметрию.
-- Не публикует ваши сценарии или собранные данные никуда автоматически.
+- It does not collect or transmit data to the developer or third parties.
+- It does not use analytics or telemetry.
+- It does not automatically publish your scripts or collected data anywhere.
 
-## Контакты
+## Contact
 
-[Укажите здесь контактный e-mail/сайт — обязательное поле в Partner Center]
+Alexander Shibisty
+shibisty.a@gmail.com
+https://shibisty.com

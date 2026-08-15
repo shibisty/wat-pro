@@ -1,12 +1,18 @@
 """
-JS для записи действий пользователя на странице (клики, ввод в
-input/textarea/select) — используется кнопкой "⏺ Записать" в редакторе
-сценариев, чтобы автоматически сгенерировать черновик сценария, который
-потом можно подправить вручную.
+JS for recording user actions on the page (clicks, input into
+input/textarea/select, scrolling) — used by the "⏺ Record" button in the
+scenario editor to auto-generate a scenario draft that can be tweaked by
+hand afterward.
 
-Механизм: слушатели click/change пишут события в очередь
-window.__qttRecordedActions; Python периодически (пока включена запись)
-вызывает RECORDER_POLL_JS, который забирает и очищает очередь.
+Mechanism: click/change/scroll listeners write events into the
+window.__qttRecordedActions queue; Python periodically (while recording
+is on) calls RECORDER_POLL_JS, which drains and clears the queue.
+
+Scrolling — the event fires very often during the scroll gesture itself
+(dozens of times a second), so we don't record every single event, but
+debounce it: only the final position after 400ms of silence following
+the last scroll event — otherwise a single gesture would produce
+hundreds of nearly identical scenario steps.
 """
 
 RECORDER_INSTALL_JS = r"""
@@ -63,6 +69,19 @@ RECORDER_INSTALL_JS = r"""
             });
         }
     }, true);
+
+    var scrollDebounceTimer = null;
+    window.addEventListener('scroll', function () {
+        if (scrollDebounceTimer) clearTimeout(scrollDebounceTimer);
+        scrollDebounceTimer = setTimeout(function () {
+            window.__qttRecordedActions.push({
+                type: 'scroll',
+                x: window.scrollX,
+                y: window.scrollY,
+                ts: Date.now(),
+            });
+        }, 400);
+    }, true);
 })();
 """
 
@@ -76,7 +95,7 @@ RECORDER_POLL_JS = """
 
 
 def action_to_step_js(action: dict) -> str:
-    """Преобразует одно записанное действие в JS-код шага сценария."""
+    """Converts one recorded action into the JS code of a scenario step."""
     selector = action.get("selector", "")
     safe_selector = selector.replace("\\", "\\\\").replace("'", "\\'")
     action_type = action.get("type")
@@ -91,6 +110,11 @@ def action_to_step_js(action: dict) -> str:
             f"el.checked = {checked}; "
             f"el.dispatchEvent(new Event('change', {{bubbles: true}})); }})();"
         )
+
+    if action_type == "scroll":
+        x = int(action.get("x", 0) or 0)
+        y = int(action.get("y", 0) or 0)
+        return f"window.scrollTo({x}, {y});"
 
     # input / select
     value = str(action.get("value", "")).replace("\\", "\\\\").replace("'", "\\'")

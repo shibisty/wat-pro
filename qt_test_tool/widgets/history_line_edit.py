@@ -1,4 +1,4 @@
-"""QLineEdit с историей введённых команд — навигация стрелками вверх/вниз, как в терминале."""
+"""QLineEdit with a history of entered commands — navigate with Up/Down arrows, like in a terminal."""
 
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QLineEdit

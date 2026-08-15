@@ -1,29 +1,30 @@
 # sign_for_local_testing.ps1
 #
-# Подписывает WATPro.msix самоподписанным сертификатом — ТОЛЬКО чтобы
-# самому установить и проверить пакет на своей машине ДО отправки в
-# Store. Для реальной публикации это не нужно: Partner Center сам
-# пересобирает подпись своим сертификатом при прохождении сертификации.
+# Signs WATPro.msix with a self-signed certificate — ONLY to install and
+# test the package on your own machine BEFORE submitting it to the Store.
+# This is not required for actual publication: Partner Center will
+# re-sign the package with its own certificate during the certification process.
 #
-# ВАЖНО: Subject сертификата (-Subject "CN=...") ДОЛЖЕН СОВПАДАТЬ 1-в-1
-# с Publisher из AppxManifest.xml — иначе Windows откажется устанавливать
-# пакет с ошибкой "signature validation failed / publisher mismatch".
+# IMPORTANT: The certificate Subject (-Subject "CN=...") MUST MATCH
+# the Publisher value from AppxManifest.xml character-for-character —
+# otherwise Windows will refuse to install the package with an error such as
+# "signature validation failed / publisher mismatch".
 #
-# Запускать из PowerShell С ПРАВАМИ АДМИНИСТРАТОРА (нужно для установки
-# сертификата в LocalMachine\TrustedPeople).
+# Run from PowerShell AS ADMINISTRATOR (required to install the certificate
+# into LocalMachine\TrustedPeople).
 
 $ErrorActionPreference = "Stop"
 
-$publisherCN = "[ЗАПОЛНИТЬ ИЗ PARTNER CENTER: то же значение, что Publisher в AppxManifest.xml]"
+$publisherCN = "[FILL IN FROM PARTNER CENTER: the same value as Publisher in AppxManifest.xml]"
 $msixPath = "WATPro.msix"
 
-if ($publisherCN -match "ЗАПОЛНИТЬ") {
-    Write-Host "Сначала подставьте реальный Publisher CN (тот же, что в AppxManifest.xml) в переменную `$publisherCN этого скрипта." -ForegroundColor Red
+if ($publisherCN -match "FILL IN") {
+    Write-Host "First, replace the actual Publisher CN (the same value as in AppxManifest.xml) in the `$publisherCN variable of this script." -ForegroundColor Red
     exit 1
 }
 
 if (-not (Test-Path $msixPath)) {
-    Write-Host "$msixPath не найден — сначала: .\build_msix.ps1" -ForegroundColor Red
+    Write-Host "$msixPath not found — run: .\build_msix.ps1 first" -ForegroundColor Red
     exit 1
 }
 
@@ -31,14 +32,14 @@ $cert = New-SelfSignedCertificate `
     -Type Custom `
     -Subject $publisherCN `
     -KeyUsage DigitalSignature `
-    -FriendlyName "WAT Pro — тестовый сертификат (только для локальной проверки)" `
+    -FriendlyName "WAT Pro — test certificate (local testing only)" `
     -CertStoreLocation "Cert:\CurrentUser\My" `
     -TextExtension @("2.5.29.37={text}1.3.6.1.5.5.7.3.3", "2.5.29.19={text}")
 
-Write-Host "Сертификат создан, thumbprint: $($cert.Thumbprint)"
+Write-Host "Certificate created, thumbprint: $($cert.Thumbprint)"
 
-# Экспортируем публичную часть и добавляем в доверенные — без этого
-# Windows откажется устанавливать самоподписанный пакет
+# Export the public part and add it to the trusted store — without this,
+# Windows will refuse to install the self-signed package
 Export-Certificate -Cert $cert -FilePath "WATProTestCert.cer" | Out-Null
 Import-Certificate -FilePath "WATProTestCert.cer" -CertStoreLocation "Cert:\LocalMachine\TrustedPeople" | Out-Null
 
@@ -46,14 +47,14 @@ $signtool = Get-ChildItem "C:\Program Files (x86)\Windows Kits\10\bin" -Recurse 
     Where-Object { $_.FullName -match "x64" } | Select-Object -First 1 -ExpandProperty FullName
 
 if (-not $signtool) {
-    Write-Host "signtool.exe не найден (тоже часть Windows SDK)" -ForegroundColor Red
+    Write-Host "signtool.exe not found (it is also part of the Windows SDK)" -ForegroundColor Red
     exit 1
 }
 
 & $signtool sign /fd SHA256 /sha1 $cert.Thumbprint $msixPath
 
 if ($LASTEXITCODE -eq 0) {
-    Write-Host "Подписано. Установить для проверки: Add-AppxPackage -Path $msixPath" -ForegroundColor Green
+    Write-Host "Signed. Install for testing: Add-AppxPackage -Path $msixPath" -ForegroundColor Green
 } else {
-    Write-Host "signtool завершился с ошибкой (код $LASTEXITCODE)" -ForegroundColor Red
+    Write-Host "signtool finished with an error (code $LASTEXITCODE)" -ForegroundColor Red
 }

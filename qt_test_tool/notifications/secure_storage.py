@@ -1,7 +1,8 @@
 """
-Хранение пароля от SMTP через системное хранилище (Windows Credential
-Manager / macOS Keychain / Secret Service на Linux) через пакет keyring —
-пароль никогда не попадает в БД или settings.ini в открытом виде.
+Stores the SMTP password via the system credential store (Windows
+Credential Manager / macOS Keychain / Secret Service on Linux) through
+the keyring package — the password never ends up in the DB or
+settings.ini in plain text.
 """
 
 from typing import Optional
@@ -13,7 +14,7 @@ SERVICE_NAME = "qt_test_tool_smtp"
 
 
 class SecureStorageUnavailable(Exception):
-    """Системное хранилище паролей недоступно на этой машине."""
+    """The system password store is unavailable on this machine."""
 
 
 def save_password(username: str, password: str):

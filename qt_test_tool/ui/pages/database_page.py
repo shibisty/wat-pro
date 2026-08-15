@@ -1,7 +1,6 @@
 """
-Страница "База данных" — просмотр collected_data (то, что сценарии
-сохранили через шаг с collect=True), с ручным редактированием/удалением
-и экспортом в CSV.
+"Database" page — view collected_data (what scenarios saved via a step
+with collect=True), with manual editing/deletion and CSV export.
 """
 
 import csv

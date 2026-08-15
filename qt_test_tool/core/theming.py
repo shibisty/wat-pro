@@ -1,7 +1,15 @@
 """
-Палитры тем (light/dark) в духе Material UI и генератор QSS-стилей для
-всего приложения.
+Light/dark theme palettes in a Material UI spirit, and the QSS
+stylesheet generator for the whole app.
 """
+
+import os
+
+from .config import CHEVRON_DOWN_ICON_PATH
+
+# Qt style sheets want forward slashes in url() regardless of OS —
+# backslashes get interpreted as escape sequences inside the QSS string.
+_CHEVRON_ICON_URL = CHEVRON_DOWN_ICON_PATH.replace(os.sep, "/")
 
 THEMES = {
     "light": {
@@ -88,7 +96,7 @@ def build_stylesheet(theme_name: str) -> str:
         background: {c['bg']};
     }}
 
-    /* ---- верхний AppBar ---- */
+    /* ---- top AppBar ---- */
     #topBar {{
         background: {c['appbar_bg']};
         min-height: 64px;
@@ -113,7 +121,7 @@ def build_stylesheet(theme_name: str) -> str:
         background: {c['appbar_pressed']};
     }}
 
-    /* ---- кнопки переключения экранов в AppBar ---- */
+    /* ---- screen-switch buttons in the AppBar ---- */
     QPushButton[class="pageTabBtn"] {{
         background: transparent;
         color: {c['appbar_text']};
@@ -132,13 +140,13 @@ def build_stylesheet(theme_name: str) -> str:
         border-bottom: 2px solid {c['primary']};
     }}
 
-    /* локальная под-панель страницы (например, управление сценарием) */
+    /* local page sub-bar (e.g. scenario management) */
     #pageSubBar {{
         background: {c['chrome_bar']};
         border-bottom: 1px solid {c['border']};
     }}
 
-    /* поле выбора сценария внутри AppBar */
+    /* scenario picker field inside the AppBar */
     #appbarScenarioCombo {{
         min-width: 200px;
     }}
@@ -146,7 +154,7 @@ def build_stylesheet(theme_name: str) -> str:
         min-width: 130px;
     }}
 
-    /* ---- карточки-панели слева ---- */
+    /* ---- card panels on the left ---- */
     QFrame[class="card"] {{
         background: {c['surface']};
         border: 1px solid {c['border']};
@@ -161,7 +169,7 @@ def build_stylesheet(theme_name: str) -> str:
         padding: 4px 0px;
     }}
 
-    /* ---- обычные кнопки (MUI outlined) ---- */
+    /* ---- regular buttons (MUI outlined) ---- */
     QPushButton {{
         background: {c['surface']};
         color: {c['primary']};
@@ -183,7 +191,7 @@ def build_stylesheet(theme_name: str) -> str:
         border-color: {c['border']};
     }}
 
-    /* ---- главная кнопка (MUI contained primary) ---- */
+    /* ---- primary button (MUI contained primary) ---- */
     QPushButton[class="primaryBtn"] {{
         background: {c['primary']};
         color: {c['primary_contrast']};
@@ -199,7 +207,7 @@ def build_stylesheet(theme_name: str) -> str:
     QPushButton[class="primaryBtn"]:pressed {{
         background: {c['primary_pressed']};
     }}
-    /* компактная высота — под рост соседних полей ввода, а не стандартная кнопка */
+    /* compact height — matching the neighboring input fields, not a standard button */
     QPushButton#goBtn {{
         padding: 11px 18px;
         border: 1px solid transparent;
@@ -207,7 +215,7 @@ def build_stylesheet(theme_name: str) -> str:
         max-height: 20px;
     }}
 
-    /* ---- круглые icon-кнопки браузера (back/forward/reload) ---- */
+    /* ---- round icon buttons for the browser (back/forward/reload) ---- */
     QPushButton[class="circleBtn"] {{
         background: transparent;
         border: none;
@@ -232,7 +240,7 @@ def build_stylesheet(theme_name: str) -> str:
         background: {c['error_bg']};
     }}
 
-    /* ---- поля ввода ---- */
+    /* ---- input fields ---- */
     QLineEdit, QComboBox, QSpinBox {{
         background: {c['surface']};
         border: 1px solid {c['border']};
@@ -244,9 +252,33 @@ def build_stylesheet(theme_name: str) -> str:
     QLineEdit:focus, QComboBox:focus, QSpinBox:focus {{
         border: 2px solid {c['primary']};
     }}
+    /* Custom drop-down + arrow (own PNG, see resources/chevron_down.png).
+       Deliberately PNG, not SVG — SVG rendering inside a Qt style sheet
+       depends on a separate qsvg plugin that isn't guaranteed to be
+       present in every PyQt6 install/build, and would silently fail to
+       render with no error at all if missing. PNG has no such
+       dependency; it's always supported.
+       Earlier this deliberately left ::drop-down completely unstyled to
+       fall back to Qt's native arrow rendering — but the native
+       drop-down button doesn't know about our custom border-radius and
+       draws its own square-cornered area, visibly notching the corner
+       of an otherwise rounded field. Styling it explicitly (radius
+       matching the field, transparent background) plus our own arrow
+       image fixes both problems: the arrow is always visible, and the
+       corner stays rounded. */
     QComboBox::drop-down {{
+        subcontrol-origin: padding;
+        subcontrol-position: top right;
+        width: 28px;
         border: none;
-        width: 30px;
+        background: transparent;
+        border-top-right-radius: 8px;
+        border-bottom-right-radius: 8px;
+    }}
+    QComboBox::down-arrow {{
+        image: url({_CHEVRON_ICON_URL});
+        width: 12px;
+        height: 12px;
     }}
     QComboBox QAbstractItemView {{
         background: {c['surface']};
@@ -274,13 +306,13 @@ def build_stylesheet(theme_name: str) -> str:
         color: {c['text']};
         alternate-background-color: {c['surface_alt']};
     }}
-    /* ВАЖНО: не стилизуем QTreeWidget::branch вообще — как только
-       задаёшь для него хоть одно свойство (даже просто background),
-       Qt перестаёт рисовать нативную стрелочку разворачивания и ждёт,
-       что вы сами предоставите картинки под все состояния (:closed,
-       :open и т.д.). Без ::branch-правила фон под стрелкой берётся из
-       общего правила QTreeWidget {{ background: ... }} выше, а сама
-       стрелка рисуется нативно (значит, всегда видна, в любой теме). */
+    /* IMPORTANT: don't style QTreeWidget::branch at all — the moment you
+       set even one property on it (even just background), Qt stops
+       drawing the native expand arrow and expects you to supply images
+       for every state (:closed, :open, etc). With no ::branch rule, the
+       background under the arrow comes from the general
+       QTreeWidget {{ background: ... }} rule above, and the arrow itself
+       is drawn natively (meaning it's always visible, in any theme). */
     QListWidget::item {{
         border-radius: 6px;
         padding: 10px 10px;
@@ -290,6 +322,9 @@ def build_stylesheet(theme_name: str) -> str:
         background: {c['hover']};
         color: {c['text']};
         border: 1px solid {c['primary']};
+    }}
+    QTableWidget::item {{
+        padding: 6px 8px;
     }}
     QTreeWidget::item {{
         border-radius: 4px;
@@ -303,7 +338,67 @@ def build_stylesheet(theme_name: str) -> str:
         color: {c['text']};
     }}
 
-    /* ---- вкладки (Код/Дерево в HTML-панели и т.п.) ---- */
+    /* ---- top menu bar (File/View/Languages) — same "never themed,
+       falls back to native OS palette" story as docks/tabs/trees below,
+       styled up front this time instead of discovering it later */
+    QMenuBar {{
+        background: {c['surface']};
+        color: {c['text']};
+        border-bottom: 1px solid {c['border']};
+        padding: 2px 4px;
+    }}
+    QMenuBar::item {{
+        background: transparent;
+        padding: 6px 10px;
+        border-radius: 6px;
+    }}
+    QMenuBar::item:selected {{
+        background: {c['hover']};
+    }}
+    QMenu {{
+        background: {c['surface']};
+        color: {c['text']};
+        border: 1px solid {c['border']};
+        border-radius: 8px;
+        padding: 4px;
+    }}
+    QMenu::item {{
+        padding: 8px 24px 8px 12px;
+        border-radius: 6px;
+    }}
+    QMenu::item:selected {{
+        background: {c['hover']};
+    }}
+    QMenu::separator {{
+        height: 1px;
+        background: {c['border']};
+        margin: 4px 8px;
+    }}
+
+    /* ---- dock title bar (the strip at the top of a panel with the
+       restore/close buttons) — same as QTreeWidget/QTabWidget before,
+       was never part of the theme and rendered with the native OS
+       palette (dark, regardless of the app's chosen theme) */
+    QDockWidget {{
+        color: {c['text']};
+    }}
+    QDockWidget::title {{
+        background: {c['surface_alt']};
+        color: {c['text']};
+        border-bottom: 1px solid {c['border']};
+        padding: 6px 8px;
+    }}
+    QDockWidget::close-button, QDockWidget::float-button {{
+        background: transparent;
+        border: none;
+        padding: 2px;
+    }}
+    QDockWidget::close-button:hover, QDockWidget::float-button:hover {{
+        background: {c['hover']};
+        border-radius: 4px;
+    }}
+
+    /* ---- tabs (Code/Tree in the HTML panel etc.) ---- */
     QTabWidget::pane {{
         border: 1px solid {c['border']};
         border-radius: 8px;
@@ -337,6 +432,14 @@ def build_stylesheet(theme_name: str) -> str:
         padding: 10px;
         font-weight: 600;
     }}
+    /* the table's corner cell (intersection of the column headers and
+       row numbers) — a separate QTableCornerButton class, NOT covered by
+       the QHeaderView::section rule above, so it's styled separately */
+    QTableCornerButton::section {{
+        background: {c['surface_alt']};
+        border: none;
+        border-bottom: 1px solid {c['border']};
+    }}
 
     QScrollBar:vertical {{
         background: transparent;
@@ -351,7 +454,7 @@ def build_stylesheet(theme_name: str) -> str:
         height: 0px;
     }}
 
-    /* ---- разделитель между левой панелью и браузером ---- */
+    /* ---- splitter between the left panel and the browser ---- */
     QSplitter::handle {{
         background: {c['bg']};
         border-left: 1px solid {c['border']};
@@ -365,7 +468,7 @@ def build_stylesheet(theme_name: str) -> str:
         background: {c['primary_pressed']};
     }}
 
-    /* ---- Chrome-подобная панель навигации браузера ---- */
+    /* ---- Chrome-like browser navigation bar ---- */
     #chromeNavBar {{
         background: {c['chrome_bar']};
         border-bottom: 1px solid {c['border']};
@@ -389,7 +492,7 @@ def build_stylesheet(theme_name: str) -> str:
         font-size: 16px;
     }}
 
-    /* ---- панель настройки размера/зума окна браузера ---- */
+    /* ---- browser window size/zoom settings bar ---- */
     #deviceBar {{
         background: {c['chrome_bar']};
         border-bottom: 1px solid {c['border']};

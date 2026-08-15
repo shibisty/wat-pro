@@ -1,45 +1,45 @@
 """
-Прогон шагов сценария через JS на странице — не зависит от виджетов Qt
-(кроме самого QWebEnginePage, без которого JS не выполнить, и QTimer для
-задержек/поллинга). Используется интерактивным окном редактора сценариев,
-а в будущем — headless CLI-режимом для крон-задач, чтобы не дублировать
-логику выполнения шагов в двух местах.
+Runs a scenario's steps as JS on the page — independent of Qt widgets
+(other than the QWebEnginePage itself, without which there's no JS to
+run, and QTimer for delays/polling). Used by the interactive scenario
+editor window, and in the future by the headless CLI mode for cron jobs,
+so step-execution logic isn't duplicated in two places.
 
-Синхронизация с загрузкой страницы (три механизма):
+Page-load synchronization (three mechanisms):
 
-- Автоопределение перехода (ВСЕГДА включено, без настройки): если шаг
-  (например клик по ссылке) запускает навигацию, раннер сам это заметит
-  через loadStarted/loadFinished и дождётся её завершения перед
-  следующим шагом. Это основной сценарий, который раньше проходил "не
-  дожидаясь загрузки" — теперь работает из коробки, ничего помечать
-  вручную не нужно.
-- wait_for_navigation (опциональный флаг шага): форсирует ожидание
-  перехода, даже если автоопределение почему-то не сработало (например,
-  навигация начинается заметно позже — за пределами короткого окна
-  проверки после самого шага).
-- wait_for_selector: перед выполнением JS шага дождаться (поллингом),
-  пока на странице не появится элемент по CSS-селектору — нужно для
-  модальных окон/воронок, которые появляются с задержкой (не связано с
-  переходом страницы, поэтому не может быть определено автоматически).
-- delay_ms: простая фиксированная пауза после шага — грубый, но
-  надёжный fallback на случай, который не покрывают варианты выше.
+- Automatic navigation detection (ALWAYS on, no configuration needed): if
+  a step (e.g. a link click) triggers navigation, the runner notices it
+  itself via loadStarted/loadFinished and waits for it to finish before
+  the next step. This is the main scenario that used to run "without
+  waiting for the load" — now it works out of the box, nothing needs to
+  be flagged manually.
+- wait_for_navigation (optional step flag): forces waiting for
+  navigation, even if auto-detection somehow missed it (e.g. navigation
+  starts noticeably later — outside the short check window right after
+  the step itself).
+- wait_for_selector: before running the step's JS, wait (by polling)
+  until an element matching the CSS selector appears on the page — needed
+  for modals/popups that appear with a delay (unrelated to page
+  navigation, so it can't be auto-detected).
+- delay_ms: a simple fixed pause after the step — a blunt but reliable
+  fallback for cases the options above don't cover.
 
-Технические детали автоопределения: сначала пробовали ожидание через
-`return new Promise(...)` внутри JS — не сработало, проверено
-эмпирически: QWebEnginePage.runJavaScript() в этой связке Qt/Chromium
-НЕ дожидается резолва Promise, а возвращает пустой объект почти
-мгновенно. Вместо connect/disconnect на loadFinished (что создаёт гонку:
-при быстрой/локальной навигации loadFinished иногда успевает сработать
-ДО того, как мы вообще решаем его ждать — тогда ожидание нового сигнала
-зависло бы до таймаута) используется постоянная подписка на
-loadStarted/loadFinished с двумя флагами и явным поллингом этих флагов.
+Technical details of auto-detection: we first tried waiting via
+`return new Promise(...)` inside the JS — didn't work, verified
+empirically: QWebEnginePage.runJavaScript() in this particular Qt/Chromium
+combo does NOT wait for a Promise to resolve, it returns an empty object
+almost instantly. Instead of connect/disconnect on loadFinished (which
+creates a race: on a fast/local navigation, loadFinished can sometimes
+fire BEFORE we even decide to wait for it — then waiting for a new signal
+would hang until the timeout), we use a persistent subscription to
+loadStarted/loadFinished with two flags and explicit polling of those flags.
 """
 
 from PyQt6.QtCore import QTimer
 
 _POLL_INTERVAL_MS = 200
 _NAVIGATION_TIMEOUT_MS = 15000
-_NAV_DETECT_GRACE_MS = 350  # окно после шага, чтобы заметить чуть отложенный старт навигации
+_NAV_DETECT_GRACE_MS = 350  # window after a step to notice a slightly delayed navigation start
 
 
 class ScenarioRunner:
@@ -54,19 +54,20 @@ class ScenarioRunner:
         self._on_notify = lambda index, step, result: None
         self._on_paused = lambda index: None
 
-        # Пауза: запрашивается через request_pause(), а реально
-        # применяется в _continue_after_step() — единственной "точке
-        # стыка" между шагами. Остановить JS-выполнение ПРЯМО ПОСРЕДИ
-        # шага нельзя (он уже ушёл в runJavaScript), поэтому пауза всегда
-        # срабатывает "после текущего шага, перед следующим" — что как раз
-        # и нужно для отладки: видно состояние строго между двумя шагами.
+        # Pause: requested via request_pause(), actually applied in
+        # _continue_after_step() — the single "junction point" between
+        # steps. Stopping JS execution RIGHT IN THE MIDDLE of a step isn't
+        # possible (it's already off inside runJavaScript), so pause
+        # always kicks in "after the current step, before the next one" —
+        # which is exactly what's needed for debugging: you see the state
+        # strictly between two steps.
         self._pause_requested = False
-        self.paused_at_index = None  # не None = сценарий на паузе, можно продолжить с этого индекса
+        self.paused_at_index = None  # not None = the scenario is paused, can resume from this index
 
-        # Автоопределение перехода: постоянная подписка + два флага,
-        # вместо connect/disconnect на каждый шаг — это устраняет гонку,
-        # когда быстрая навигация успевает начаться и завершиться ДО того,
-        # как мы вообще решаем, ждать её или нет.
+        # Automatic navigation detection: a persistent subscription plus
+        # two flags, instead of connect/disconnect on every step — this
+        # removes the race where a fast navigation manages to start and
+        # finish BEFORE we even decide whether to wait for it or not.
         self._nav_started = False
         self._nav_finished = False
         self.page.loadStarted.connect(self._mark_nav_started)
@@ -85,22 +86,22 @@ class ScenarioRunner:
         """
         steps: [{
             "js": str, "expected": str, "collect": bool, "notify": bool,
-            "wait_for_navigation": bool,       # форсировать ожидание перехода
-            "wait_for_selector": str,          # CSS-селектор, ждать перед шагом
-            "wait_timeout_ms": int,            # таймаут ожидания селектора
-            "delay_ms": int,                   # доп. пауза после шага
+            "wait_for_navigation": bool,       # force waiting for navigation
+            "wait_for_selector": str,          # CSS selector, wait before the step
+            "wait_timeout_ms": int,            # selector wait timeout
+            "delay_ms": int,                   # extra pause after the step
         }, ...]
         on_log(text, level="info"|"ok"|"error")
-        on_step_result(index, success: bool, result) — вызывается после каждого шага
-        on_finished(success: bool) — вызывается один раз в конце (успех/провал,
-            НЕ вызывается при паузе — см. on_paused)
-        on_paused(next_index: int) — вызывается, когда сценарий поставлен на
-            паузу (request_pause()); next_index — с какого шага продолжать
-        on_collect(index, step, result) — вызывается для шагов с collect=True
-        on_notify(index, step, result) — вызывается для шагов с notify=True
-        start_message: если задано — печатается вместо стандартного "Запуск сценария"
-        resume_from: индекс шага, с которого начать (0 — с начала; для
-            продолжения после паузы передайте runner.paused_at_index)
+        on_step_result(index, success: bool, result) — called after each step
+        on_finished(success: bool) — called once at the end (success/failure,
+            NOT called on pause — see on_paused)
+        on_paused(next_index: int) — called when the scenario is paused
+            (request_pause()); next_index is which step to resume from
+        on_collect(index, step, result) — called for steps with collect=True
+        on_notify(index, step, result) — called for steps with notify=True
+        start_message: if set, printed instead of the standard "Running scenario"
+        resume_from: step index to start from (0 — from the beginning; to
+            resume after a pause, pass runner.paused_at_index)
         """
         if self.running:
             if on_log:
@@ -127,16 +128,16 @@ class ScenarioRunner:
 
     def request_pause(self):
         """
-        Попросить остановиться после текущего шага (не мгновенно — шаг,
-        который уже выполняется, доработает до конца). Сессия/страница НЕ
-        трогается — просто останавливается цикл шагов, чтобы можно было
-        посмотреть состояние и продолжить с того же места через
+        Ask to stop after the current step (not instantly — a step that's
+        already running will finish first). The session/page is NOT
+        touched — it just stops the step loop, so you can inspect the
+        state and continue from the same point via
         run(steps, resume_from=runner.paused_at_index).
         """
         if self.running:
             self._pause_requested = True
 
-    # ---------------- Основной цикл ----------------
+    # ---------------- Main loop ----------------
 
     def _run_step(self, index):
         if index >= len(self._steps):
@@ -157,7 +158,7 @@ class ScenarioRunner:
 
     def _poll_for_selector(self, index, selector, timeout_ms, elapsed_ms):
         if not self.running:
-            return  # сценарий остановили, пока ждали
+            return  # the scenario was stopped while we were waiting
 
         if elapsed_ms >= timeout_ms:
             self._on_log(
@@ -188,8 +189,8 @@ class ScenarioRunner:
         step = self._steps[index]
         self._on_log(f"Шаг {index + 1}: {step['js'].strip()[:80]}")
 
-        # сбрасываем флаги перед шагом — далее следим, не вызвал ли ЭТОТ
-        # шаг переход страницы (клик по ссылке и т.п.)
+        # reset the flags before the step — from here on we watch whether
+        # THIS step triggered page navigation (e.g. a link click)
         self._nav_started = False
         self._nav_finished = False
 
@@ -226,10 +227,10 @@ class ScenarioRunner:
                 self._on_log(f"✓ Шаг {index + 1} выполнен, результат: {result}", "ok")
                 self._on_step_result(index, True, result)
 
-            # короткое окно, чтобы заметить навигацию, которая стартовала
-            # не синхронно в момент выполнения JS, а чуть позже (следующий
-            # тик event loop) — без этого быстрые шаги срывались бы дальше
-            # до того, как страница вообще успевала начать грузиться
+            # short window to notice navigation that started not
+            # synchronously during JS execution but slightly later (the
+            # next event loop tick) — without this, fast steps would race
+            # ahead before the page even had a chance to start loading
             QTimer.singleShot(_NAV_DETECT_GRACE_MS, lambda: self._after_step_grace(index))
 
         self.page.runJavaScript(step["js"], callback)
@@ -276,4 +277,3 @@ class ScenarioRunner:
             QTimer.singleShot(delay_ms, lambda: self._run_step(index + 1))
         else:
             self._run_step(index + 1)
-            

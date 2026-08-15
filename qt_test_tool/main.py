@@ -1,11 +1,11 @@
 """
-Точка входа приложения.
+Application entry point.
 
-Обычный запуск (GUI):
+Normal (GUI) run:
     python run.py
 
-Headless-прогон одного сценария (вызывается Windows Task Scheduler'ом,
-см. scheduler/task_scheduler_bridge.py):
+Headless run of a single scenario (invoked by Windows Task Scheduler,
+see scheduler/task_scheduler_bridge.py):
     python -m qt_test_tool.main --run-scenario 3
 """
 
@@ -32,18 +32,18 @@ def run_gui():
 
 def run_headless(scenario_id: str):
     """
-    Открывает URL сценария, прогоняет шаги через тот же ScenarioRunner,
-    что и интерактивный редактор, пишет collect-результаты в БД, обновляет
-    статус последнего запуска в cron_jobs и (если настроено) отправляет
-    e-mail уведомление об успехе/неудаче.
+    Opens the scenario's URL, runs its steps through the same
+    ScenarioRunner as the interactive editor, writes collect results to
+    the DB, updates the last-run status in cron_jobs, and (if configured)
+    sends an e-mail notification about success/failure.
 
-    Как и интерактивный прогон (см. ScenarioMixin._start_fresh_session),
-    использует off-the-record профиль — каждый запуск (даже в отдельном
-    процессе, как здесь) получает чистую сессию без куки/кэша от прошлого
-    раза. Это важно и для headless-режима: обычный defaultProfile хранит
-    данные на диске между отдельными запусками процесса, так что без
-    явного off-the-record тут тоже можно было бы словить "уже лежит в
-    корзине" при повторном прогоне по расписанию.
+    Like the interactive run (see ScenarioMixin._start_fresh_session), it
+    uses an off-the-record profile — every run (even in a separate
+    process, like here) gets a clean session with no cookies/cache from
+    last time. This matters for headless mode too: a regular
+    defaultProfile stores data on disk between separate process runs, so
+    without an explicit off-the-record profile you could still hit
+    "already in the cart" on a repeat scheduled run.
     """
     from PyQt6.QtCore import QUrl
     from PyQt6.QtWebEngineWidgets import QWebEngineView
@@ -65,18 +65,25 @@ def run_headless(scenario_id: str):
         print(f"Сценарий id={scenario_id} не найден", file=sys.stderr)
         sys.exit(1)
 
-    profile = QWebEngineProfile()  # анонимный конструктор = off-the-record, свежая сессия
+    profile = QWebEngineProfile()  # anonymous constructor = off-the-record, a fresh session
     interceptor = HeaderInterceptor()
     configure_profile(profile, interceptor, ACCEPT_LANGUAGE_MAP["en"], NAVIGATOR_LOCALE_MAP["en"], "light")
 
     view = QWebEngineView()
-    view.setPage(LoggingWebPage(profile, view, lambda *a: None))
+    page = LoggingWebPage(profile, view, lambda *a: None)
+    view.setPage(page)
+
+    def on_bridge_insert(data):
+        collected_data_repo.insert_row(conn, scenario_id, data)
+
+    page.bridge.dataInserted.connect(on_bridge_insert)
     view.setFixedSize(scenario.get("width", 1366), scenario.get("height", 768))
-    # Зум — чисто визуальный масштаб для просмотра глазами (см.
-    # web/zoomable_canvas.py), в headless-режиме показывать нечего, а
-    # применение zoomFactor исказило бы window.innerWidth/innerHeight и
-    # тестировало бы не тот viewport, что задан в сценарии — поэтому здесь
-    # он намеренно не применяется.
+    # Zoom is purely a visual scale for viewing with your own eyes (see
+    # web/zoomable_canvas.py) — there's nothing to display in headless
+    # mode, and applying zoomFactor would distort
+    # window.innerWidth/innerHeight and end up testing a different
+    # viewport than the one the scenario specifies — so it's deliberately
+    # not applied here.
     log_lines = []
 
     def log(text, level="info"):

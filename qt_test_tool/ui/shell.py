@@ -1,15 +1,15 @@
 """
-Оболочка приложения: общий AppBar (переключение экранов, язык, тема) +
-QStackedWidget с четырьмя страницами. Всё общее состояние (тема, язык,
-соединение с БД, HTTP-профиль WebEngine) живёт здесь и пробрасывается в
-страницы через self (AppShell передаётся каждой странице как `app`).
+Application shell: a shared AppBar (screen switching, language, theme) +
+a QStackedWidget with four pages. All shared state (theme, language, DB
+connection, WebEngine HTTP profile) lives here and is passed down to the
+pages via self (AppShell is passed to each page as `app`).
 """
 
 from PyQt6.QtCore import Qt, QSettings
-from PyQt6.QtGui import QIcon
+from PyQt6.QtGui import QIcon, QActionGroup
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QPushButton, QComboBox, QStackedWidget,
+    QPushButton, QStackedWidget,
 )
 from PyQt6.QtWebEngineCore import QWebEngineProfile
 
@@ -44,7 +44,7 @@ class AppShell(QMainWindow):
         self.setWindowIcon(QIcon(ICON_PATH))
         self.resize(1800, 1100)
 
-        # ---- настройки профиля (.ini): тема и язык ----
+        # ---- profile settings (.ini): theme and language ----
         self.settings = QSettings(SETTINGS_PATH, QSettings.Format.IniFormat)
         saved_theme = self.settings.value("profile/theme", "")
         saved_language = self.settings.value("profile/language", "")
@@ -64,14 +64,14 @@ class AppShell(QMainWindow):
             Qt.LayoutDirection.RightToLeft if self.language in RTL_LANGUAGES else Qt.LayoutDirection.LeftToRight
         )
 
-        # ---- общий WebEngine-профиль (заголовки, Accept-Language, JS-мост) ----
+        # ---- shared WebEngine profile (headers, Accept-Language, JS bridge) ----
         self.interceptor = HeaderInterceptor()
         profile = QWebEngineProfile.defaultProfile()
         profile.setUrlRequestInterceptor(self.interceptor)
         profile.setHttpAcceptLanguage(ACCEPT_LANGUAGE_MAP.get(self.language, ACCEPT_LANGUAGE_MAP["en"]))
         self._install_page_scripts()
 
-        # ---- общее соединение с БД (не сценарии — те снова JSON-файлы) ----
+        # ---- shared DB connection (not scenarios — those are JSON files again) ----
         self.db_conn = database.ensure_ready()
         scenarios_repo.ensure_ready()
 
@@ -105,7 +105,7 @@ class AppShell(QMainWindow):
         outer.setSpacing(0)
         self.setCentralWidget(central)
 
-        # ---- верхний AppBar: переключение экранов + язык + тема ----
+        # ---- top AppBar: screen switching + language + theme ----
         top_bar = QWidget()
         top_bar.setObjectName("topBar")
         top_layout = QHBoxLayout(top_bar)
@@ -124,16 +124,6 @@ class AppShell(QMainWindow):
 
         top_layout.addStretch()
 
-        self.lang_combo = QComboBox()
-        self.lang_combo.setObjectName("appbarLangCombo")
-        for code, name in SUPPORTED_LANGUAGES.items():
-            self.lang_combo.addItem(name, code)
-        idx = self.lang_combo.findData(self.language)
-        if idx >= 0:
-            self.lang_combo.setCurrentIndex(idx)
-        self.lang_combo.currentIndexChanged.connect(self.on_language_changed)
-        top_layout.addWidget(self.lang_combo)
-
         self.theme_btn = QPushButton("🌙")
         self.theme_btn.setObjectName("themeToggle")
         self.theme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -142,7 +132,7 @@ class AppShell(QMainWindow):
 
         outer.addWidget(top_bar)
 
-        # ---- страницы ----
+        # ---- pages ----
         self.stack = QStackedWidget()
         outer.addWidget(self.stack, stretch=1)
 
@@ -154,27 +144,70 @@ class AppShell(QMainWindow):
         for key, _, _ in PAGES:
             self.stack.addWidget(self.pages[key])
 
+        # docks referenced by the View menu must exist first — built
+        # after the pages, not before
+        self._build_menu_bar()
+
         self.switch_page("scenario_editor")
+
+    def _build_menu_bar(self):
+        """
+        A standard Windows-style top menu bar (File/View/Languages) —
+        alongside the existing custom AppBar, not replacing it. View
+        reflects the visibility of the scenario editor's three docks
+        (Scenario steps/Auxiliary Tools/JS console) — previously only
+        reachable via the 🗔 button that lived inside that page, moved
+        here so it's available regardless of which page is active.
+        Languages replaces the old AppBar combo box.
+        """
+        menubar = self.menuBar()
+
+        self.file_menu = menubar.addMenu("")
+        self.exit_action = self.file_menu.addAction("")
+        self.exit_action.triggered.connect(self.close)
+
+        self.view_menu = menubar.addMenu("")
+        editor = self.pages["scenario_editor"]
+        # toggleViewAction() is a built-in Qt convenience — a ready-made
+        # checkable QAction tied to the dock's visibility, with its text
+        # automatically kept in sync with the dock's windowTitle()
+        # (which the page's own retranslate() already updates), so no
+        # extra retranslation work is needed for these three specifically
+        self.view_menu.addAction(editor.left_dock.toggleViewAction())
+        self.view_menu.addAction(editor.html_dock.toggleViewAction())
+        self.view_menu.addAction(editor.console_dock.toggleViewAction())
+
+        self.languages_menu = menubar.addMenu("")
+        self._language_actions = {}
+        lang_group = QActionGroup(self)
+        lang_group.setExclusive(True)
+        for code, name in SUPPORTED_LANGUAGES.items():
+            action = self.languages_menu.addAction(name)
+            action.setCheckable(True)
+            action.setChecked(code == self.language)
+            lang_group.addAction(action)
+            action.triggered.connect(lambda checked, c=code: self.on_language_menu_selected(c))
+            self._language_actions[code] = action
 
     def switch_page(self, key: str):
         self.stack.setCurrentWidget(self.pages[key])
         for k, btn in self.page_buttons.items():
             btn.setChecked(k == key)
-        # у страниц БД/автоматизации данные могут устареть, пока их не видно
+        # the DB/scheduler pages' data can go stale while they're not visible
         if key == "database" and hasattr(self.pages["database"], "refresh"):
             self.pages["database"].refresh()
         if key == "scheduler" and hasattr(self.pages["scheduler"], "refresh"):
             self.pages["scheduler"].refresh()
 
-    # ---------------- Тема/язык (общие для всех страниц) ----------------
+    # ---------------- Theme/language (shared across all pages) ----------------
     def _install_page_scripts(self):
         """
-        Раньше здесь была своя копия настройки скриптов профиля — из-за
-        этого дефолтный профиль (используется до первого запуска сценария,
-        когда ещё не подменили страницу на off-the-record) не получал
-        наблюдатель за ресурсами (вкладка "Кэш" пустая) и вообще был
-        источником рассинхронизации с configure_profile(). Теперь оба
-        места настройки профиля идут через одну и ту же функцию.
+        This used to have its own copy of the profile script setup — as a
+        result, the default profile (used before the first scenario run,
+        while the page hasn't been swapped for an off-the-record one yet)
+        never got the resource observer (the "Cache" tab stayed empty) and
+        was in general a source of drift from configure_profile(). Now
+        both places that configure a profile go through the same function.
         """
         profile = QWebEngineProfile.defaultProfile()
         nav_lang = NAVIGATOR_LOCALE_MAP.get(self.language, "en-US")
@@ -200,11 +233,12 @@ class AppShell(QMainWindow):
             page.apply_theme()
             web_view = getattr(page, "web_view", None)
             if web_view is not None:
-                # build_live_update_script вызывает уже установленные на
-                # странице window.__qttSetTheme/__qttSetLanguage — это
-                # реально дёргает подписанные matchMedia('change')-колбэки
-                # сайта, а не просто переопределяет matchMedia заново (что
-                # обнулило бы уже подписанных слушателей).
+                # build_live_update_script calls the
+                # window.__qttSetTheme/__qttSetLanguage already installed
+                # on the page — this actually fires the site's subscribed
+                # matchMedia('change') callbacks, instead of just
+                # redefining matchMedia again (which would wipe out
+                # already-subscribed listeners).
                 web_view.page().runJavaScript(build_live_update_script(nav_lang, self.theme))
 
     def toggle_theme(self):
@@ -213,8 +247,7 @@ class AppShell(QMainWindow):
         self.settings.sync()
         self.apply_theme()
 
-    def on_language_changed(self, index):
-        code = self.lang_combo.itemData(index)
+    def on_language_menu_selected(self, code):
         if not code or code == self.language:
             return
         self.language = code
@@ -242,6 +275,8 @@ class AppShell(QMainWindow):
         t = self.t
         for key, tr_key, icon in PAGES:
             self.page_buttons[key].setToolTip(t(tr_key))
-        self.lang_combo.setToolTip(t("tooltip_language_select"))
         self.theme_btn.setToolTip(t("tooltip_theme_toggle"))
-        
+        self.file_menu.setTitle(t("menu_file"))
+        self.exit_action.setText(t("menu_exit"))
+        self.view_menu.setTitle(t("menu_view"))
+        self.languages_menu.setTitle(t("menu_languages"))

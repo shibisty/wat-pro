@@ -1,11 +1,12 @@
 """
-Холст браузера на QGraphicsView. В отличие от QWebEngineView.setZoomFactor
-(который меняет window.innerWidth/innerHeight — то есть "зумит контент
-внутри окна", а не "окно контента"), масштаб здесь применяется как
-визуальная трансформация QGraphicsView. Сам QWebEngineView всегда
-остаётся зафиксированного px-размера (setFixedSize), поэтому страница
-всегда видит именно тот viewport, который выставлен в device-панели —
-как эмуляция устройства в Chrome DevTools, а не браузерный page zoom.
+The browser canvas, on a QGraphicsView. Unlike
+QWebEngineView.setZoomFactor (which changes window.innerWidth/innerHeight
+— i.e. "zooms the content inside the window", not "the window of
+content"), the scale here is applied as a visual QGraphicsView
+transform. QWebEngineView itself always stays at a fixed px size
+(setFixedSize), so the page always sees exactly the viewport configured
+in the device panel — like device emulation in Chrome DevTools, not a
+browser page zoom.
 """
 
 from PyQt6.QtCore import Qt
@@ -39,7 +40,7 @@ class ZoomableWebCanvas(QGraphicsView):
         return self._zoom
 
     def update_content_size(self):
-        """Вызывать после web_view.setFixedSize(...) — обновляет границы сцены."""
+        """Call after web_view.setFixedSize(...) — updates the scene bounds."""
         self._update_scene_rect()
 
     def _update_scene_rect(self):

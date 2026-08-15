@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
-  ВАЖНО: строки с пометкой [ЗАПОЛНИТЬ ИЗ PARTNER CENTER] нужно заменить
-  на точные значения, которые Partner Center покажет ПОСЛЕ резервирования
-  имени приложения (Dashboard → Ваше приложение → Product management →
-  App identity). Publisher и Name там показаны буква-в-букву — просто
-  скопируйте оттуда, не придумывайте сами: если не совпадёт хоть один
-  символ, загрузка пакета в Partner Center будет отклонена.
+  IMPORTANT: Lines marked [FILL IN FROM PARTNER CENTER] must be replaced
+  with the exact values shown by Partner Center AFTER reserving the app name
+  (Dashboard → Your app → Product management → App identity).
+  Publisher and Name are shown there character-for-character — simply
+  copy them from Partner Center; do not make them up yourself. If even
+  one character does not match, the package upload to Partner Center will be rejected.
 -->
 <Package
   xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
@@ -14,13 +14,13 @@
   IgnorableNamespaces="uap rescap">
 
   <Identity
-    Name="[ЗАПОЛНИТЬ ИЗ PARTNER CENTER: Package/Identity/Name]"
-    Publisher="[ЗАПОЛНИТЬ ИЗ PARTNER CENTER: Package/Identity/Publisher, напр. CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX]"
+    Name="[FILL IN FROM PARTNER CENTER: Package/Identity/Name]"
+    Publisher="[FILL IN FROM PARTNER CENTER: Package/Identity/Publisher, e.g. CN=XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX]"
     Version="1.0.0.0" />
 
   <Properties>
     <DisplayName>WAT Pro (Web Automation Tools)</DisplayName>
-    <PublisherDisplayName>[ЗАПОЛНИТЬ ИЗ PARTNER CENTER: имя издателя аккаунта]</PublisherDisplayName>
+    <PublisherDisplayName>[FILL IN FROM PARTNER CENTER: account publisher name]</PublisherDisplayName>
     <Logo>Images\StoreLogo.png</Logo>
   </Properties>
 
@@ -37,7 +37,7 @@
     <Application Id="WATPro" Executable="WAT Pro.exe" EntryPoint="Windows.FullTrustApplication">
       <uap:VisualElements
         DisplayName="WAT Pro (Web Automation Tools)"
-        Description="Инструмент автоматизации и тестирования веб-страниц: сценарии, JS-консоль, авто-заполнение форм, планировщик задач, e-mail уведомления."
+        Description="A web page automation and testing tool: scripts, JS console, form auto-fill, task scheduler, and e-mail notifications."
         BackgroundColor="transparent"
         Square150x150Logo="Images\Square150x150Logo.png"
         Square44x44Logo="Images\Square44x44Logo.png">
@@ -48,10 +48,10 @@
   </Applications>
 
   <Capabilities>
-    <!-- runFullTrust обязателен для любого классического Win32-приложения,
-         упакованного через Desktop Bridge (не UWP) -->
+    <!-- runFullTrust is required for any classic Win32 application
+         packaged through Desktop Bridge (not UWP) -->
     <rescap:Capability Name="runFullTrust" />
-    <!-- приложение ходит в сеть (браузер, SMTP) -->
+    <!-- The application accesses the network (browser, SMTP) -->
     <Capability Name="internetClient" />
   </Capabilities>
 </Package>

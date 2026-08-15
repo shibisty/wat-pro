@@ -1,21 +1,21 @@
 """
-JS для построения дерева контента страницы (для вкладки "Дерево" в
-HTML-панели) и подсветки элемента в браузере при наведении.
+JS for building the page content tree (for the "Tree" tab in the HTML
+panel) and highlighting an element in the browser on hover.
 
-DOM_TREE_JS основан на присланном HTMLToTree, с исправлением нескольких
-багов оригинала:
+DOM_TREE_JS is based on a supplied HTMLToTree, with a few bugs from the
+original fixed:
 - `node.parentNode.tagName  null` -> `node.parentNode.tagName || null`
-  (пропущен оператор ||)
-- `element.innerText  ''` -> `element.innerText || ''` (та же ошибка)
-- `const upeClass = upe-node- + makeid(7)` -> строка не была строкой
-  (нет кавычек) и не было оператора конкатенации
-- `makeid` нигде не была определена — добавлена реализация
+  (the || operator was missing)
+- `element.innerText  ''` -> `element.innerText || ''` (same mistake)
+- `const upeClass = upe-node- + makeid(7)` -> the string wasn't actually
+  a string literal (no quotes) and there was no concatenation operator
+- `makeid` wasn't defined anywhere — an implementation was added
 
-Дополнительно: каждому классифицируемому узлу присваивается уникальный
-CSS-класс upe-node-XXXXXXX прямо в живом DOM — это даёт stable selector,
-по которому можно точно подсветить элемент в браузере, и который также
-остаётся в HTML при последующем page.toHtml() (то есть виден и во
-вкладке "Код").
+On top of that: every classified node gets assigned a unique CSS class
+upe-node-XXXXXXX right in the live DOM — this gives a stable selector
+that lets us precisely highlight the element in the browser, and which
+also stays in the HTML on a subsequent page.toHtml() (i.e. it's visible
+in the "Code" tab too).
 """
 
 DOM_TREE_JS = r"""
@@ -104,9 +104,10 @@ DOM_TREE_JS = r"""
 
 def build_highlight_script(selector) -> str:
     """
-    Подсвечивает элемент по CSS-селектору (обычно .upe-node-XXXXXXX) на
-    живой странице контуром; снимает подсветку с ранее выделенного
-    элемента. selector=None/пусто — просто снять подсветку.
+    Highlights the element matching the CSS selector (usually
+    .upe-node-XXXXXXX) on the live page with an outline; clears the
+    highlight from the previously highlighted element. selector=None/empty
+    just clears the highlight.
     """
     selector_js = "null"
     if selector:

@@ -1,10 +1,10 @@
 """
-SQLite-подключение и схема БД — только рантайм-данные, которые не нужно
-передавать между пользователями как файл: собранные данные, зеркало
-задач Task Scheduler, настройки уведомлений (кроме пароля — тот в
-keyring). Сами сценарии — снова JSON-файлы в scenarios/ (см.
-scenarios_repo.py), поэтому scenario_id здесь — просто текстовый UUID
-без внешнего ключа на таблицу (такой таблицы больше нет).
+SQLite connection and DB schema — only runtime data that doesn't need to
+be handed off between users as a file: collected data, a mirror of Task
+Scheduler jobs, notification settings (except the password — that's in
+keyring). The scenarios themselves are, again, JSON files in scenarios/
+(see scenarios_repo.py), so scenario_id here is just a plain text UUID
+with no foreign key to a table (that table no longer exists).
 """
 
 import os
@@ -28,10 +28,10 @@ CREATE TABLE IF NOT EXISTS cron_jobs (
     scenario_id TEXT NOT NULL,
     task_name TEXT NOT NULL UNIQUE,
     schedule_type TEXT NOT NULL,      -- 'once' | 'daily' | 'weekly' | 'minutely'
-    schedule_value TEXT NOT NULL,     -- напр. "14:30" или "5" (минут) — интерпретация зависит от schedule_type
+    schedule_value TEXT NOT NULL,     -- e.g. "14:30" or "5" (minutes) — interpreted depending on schedule_type
     enabled INTEGER NOT NULL DEFAULT 1,
     last_run_at TEXT,
-    last_status TEXT,                 -- 'success' | 'failure' | NULL (ещё не запускался)
+    last_status TEXT,                 -- 'success' | 'failure' | NULL (hasn't run yet)
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

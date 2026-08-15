@@ -1,24 +1,24 @@
 """
-Общие пути и константы приложения.
+Shared paths and constants for the application.
 
-В обычном запуске (python run.py) всё — translations/, settings.ini,
-scenarios/ — живёт рядом с пакетом qt_test_tool/.
+In a normal run (python run.py), everything — translations/,
+settings.ini, scenarios/ — lives next to the qt_test_tool/ package.
 
-В собранном PyInstaller-приложении это разделяется:
-- APP_DIR (пользовательские данные: settings.ini, scenarios/, БД) —
-  папка РЯДОМ С САМИМ .exe, чтобы данные не терялись между запусками
-  (--onefile каждый раз распаковывает бандл во временную папку —
-  писать туда что-то постоянное нельзя, она удаляется после выхода).
-- BUNDLE_DIR (только для чтения: translations/, resources/) — папка,
-  куда PyInstaller распаковал сами файлы приложения (sys._MEIPASS для
-  --onefile, папка рядом с exe для --onedir).
+In a bundled PyInstaller build this is split:
+- APP_DIR (user data: settings.ini, scenarios/, DB) — the folder RIGHT
+  NEXT TO the .exe itself, so data isn't lost between runs (--onefile
+  unpacks the bundle into a temp folder every time — you can't write
+  anything persistent there, it gets deleted on exit).
+- BUNDLE_DIR (read-only: translations/, resources/) — the folder where
+  PyInstaller unpacked the application's own files (sys._MEIPASS for
+  --onefile, the folder next to the exe for --onedir).
 
-Если приложение упаковано в MSIX (Desktop Bridge) — папка установки
-доступна ТОЛЬКО ДЛЯ ЧТЕНИЯ, писать туда вообще нельзя (Windows исторически
-подставляет скрытый редирект для классических Win32-приложений, но это
-устаревший механизм, полагаться на него не стоит). В этом случае
-APP_DIR принудительно переезжает в %LOCALAPPDATA%\\WAT Pro — это и есть
-официально рекомендованное место для данных упакованного приложения.
+If the app is packaged as MSIX (Desktop Bridge) — the install folder is
+READ-ONLY, you can't write there at all (Windows historically applies a
+hidden redirect for classic Win32 apps, but that's a legacy mechanism you
+shouldn't rely on). In that case APP_DIR is forced to
+%LOCALAPPDATA%\\WAT Pro — this is the officially recommended location for
+a packaged app's data.
 """
 
 import os
@@ -32,10 +32,10 @@ def _is_frozen() -> bool:
 
 def _packaged_app_data_dir():
     """
-    Если процесс запущен из MSIX-пакета — вернуть %LOCALAPPDATA%\\WAT Pro,
-    иначе None. Определяется через GetCurrentPackageFullName (стандартный
-    способ для классических Win32-приложений узнать, что их запустили
-    через Desktop Bridge/MSIX identity).
+    If the process was launched from an MSIX package — return
+    %LOCALAPPDATA%\\WAT Pro, otherwise None. Detected via
+    GetCurrentPackageFullName (the standard way for a classic Win32 app
+    to find out it was launched through Desktop Bridge/MSIX identity).
     """
     if platform.system() != "Windows":
         return None
@@ -45,7 +45,7 @@ def _packaged_app_data_dir():
         res = ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(length), None)
         APPMODEL_ERROR_NO_PACKAGE = 15700
         if res == APPMODEL_ERROR_NO_PACKAGE:
-            return None  # обычный (не MSIX) запуск
+            return None  # a regular (non-MSIX) run
         buf = ctypes.create_unicode_buffer(length.value)
         ctypes.windll.kernel32.GetCurrentPackageFullName(ctypes.byref(length), buf)
         local_appdata = os.environ.get("LOCALAPPDATA")
@@ -65,12 +65,13 @@ if _is_frozen():
     else:
         APP_DIR = os.path.dirname(sys.executable)
 else:
-    # Папка пакета qt_test_tool/ (на уровень выше core/)
+    # The qt_test_tool/ package folder (one level above core/)
     APP_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     BUNDLE_DIR = APP_DIR
 
 TRANSLATIONS_DIR = os.path.join(BUNDLE_DIR, "translations")
 ICON_PATH = os.path.join(BUNDLE_DIR, "resources", "icon.png")
+CHEVRON_DOWN_ICON_PATH = os.path.join(BUNDLE_DIR, "resources", "chevron_down.png")
 
 SETTINGS_PATH = os.path.join(APP_DIR, "settings.ini")
 SCENARIOS_DIR = os.path.join(APP_DIR, "scenarios")

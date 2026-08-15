@@ -1,7 +1,7 @@
 """
-Локализация интерфейса: поддерживаемые языки, загрузка переводов из
-translations/*.json, определение языка системы, HTTP/JS-настройки локали,
-которые пробрасываются в саму веб-страницу.
+UI localization: supported languages, loading translations from
+translations/*.json, detecting the system language, HTTP/JS locale
+settings that get forwarded into the web page itself.
 """
 
 import json
@@ -12,7 +12,7 @@ from PyQt6.QtCore import QLocale
 from .config import TRANSLATIONS_DIR
 
 # ---------------------------------------------------------------------------
-# Поддерживаемые языки интерфейса
+# Supported UI languages
 # ---------------------------------------------------------------------------
 SUPPORTED_LANGUAGES = {
     "en": "English",
@@ -30,7 +30,7 @@ SUPPORTED_LANGUAGES = {
 }
 RTL_LANGUAGES = {"ar"}
 
-# Заголовок Accept-Language, который реально уходит в HTTP-запросы к сайту
+# The Accept-Language header that actually goes out in HTTP requests to the site
 ACCEPT_LANGUAGE_MAP = {
     "en": "en-US,en;q=0.9",
     "ru": "ru-RU,ru;q=0.9,en;q=0.8",
@@ -46,7 +46,7 @@ ACCEPT_LANGUAGE_MAP = {
     "de": "de-DE,de;q=0.9,en;q=0.8",
 }
 
-# BCP47-тег, который страница увидит через navigator.language/languages
+# The BCP47 tag the page will see via navigator.language/languages
 NAVIGATOR_LOCALE_MAP = {
     "en": "en-US", "ru": "ru-RU", "uk": "uk-UA", "zh": "zh-CN", "ko": "ko-KR",
     "ja": "ja-JP", "es": "es-ES", "fr": "fr-FR", "ar": "ar-SA", "pt": "pt-PT", "hi": "hi-IN",
@@ -56,10 +56,10 @@ NAVIGATOR_LOCALE_MAP = {
 
 def load_translations(lang_code: str) -> dict:
     """
-    Загружает JSON-файл перевода из translations/<lang>.json.
-    Если файла нет или каких-то ключей не хватает — недостающее
-    подтягивается из английского (базового) файла, чтобы интерфейс
-    никогда не показывал пустые подписи.
+    Loads the translation JSON file from translations/<lang>.json.
+    If the file is missing or some keys are missing — the gaps are
+    filled in from the English (base) file, so the UI never shows blank
+    labels.
     """
     def _read(code):
         path = os.path.join(TRANSLATIONS_DIR, f"{code}.json")
@@ -80,9 +80,9 @@ def load_translations(lang_code: str) -> dict:
 
 
 def detect_system_language() -> str:
-    """Определяет язык ОС и сопоставляет его с поддерживаемыми."""
+    """Detects the OS language and maps it to a supported one."""
     try:
-        locale_name = QLocale.system().name()  # напр. "ru_RU", "zh_CN"
+        locale_name = QLocale.system().name()  # e.g. "ru_RU", "zh_CN"
         code = locale_name.split("_")[0].lower()
         if code in SUPPORTED_LANGUAGES:
             return code

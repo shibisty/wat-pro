@@ -1,9 +1,9 @@
 """
-Таблица cron_jobs — это НЕ источник правды по расписанию (тот — сам
-Windows Task Scheduler), а зеркало для отображения в интерфейсе: какие
-задачи существуют, когда последний раз запускались и с каким статусом.
-scenario_id — текстовый UUID сценария (JSON-файл), имя подтягивается
-отдельно из scenarios_repo, а не SQL JOIN'ом.
+The cron_jobs table is NOT the source of truth for scheduling (that's
+Windows Task Scheduler itself) — it's a mirror for display in the UI:
+what jobs exist, when they last ran and with what status. scenario_id is
+the scenario's text UUID (a JSON file); the name is fetched separately
+from scenarios_repo, not via a SQL JOIN.
 """
 
 from . import scenarios_repo

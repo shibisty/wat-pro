@@ -1,24 +1,26 @@
 """
-JS для вкладок "localStorage" и "Кэш" в HTML-панели.
+JS for the "localStorage" and "Cache" tabs in the HTML panel.
 
-LOCAL_STORAGE_JS — простое перечисление localStorage.
+LOCAL_STORAGE_JS — a simple enumeration of localStorage.
 
-RESOURCE_OBSERVER_INSTALL_JS — устанавливается РАНО (DocumentCreation,
-до скриптов самой страницы, см. configure_profile() в web/page.py) и
-копит список загруженных ресурсов в собственный, независимый от
-браузера массив window.__qttResourceLog через PerformanceObserver.
+RESOURCE_OBSERVER_INSTALL_JS — installed EARLY (DocumentCreation, before
+the page's own scripts, see configure_profile() in web/page.py) and
+collects the list of loaded resources into our own array,
+window.__qttResourceLog, independent of the browser, via a
+PerformanceObserver.
 
-Это важно: многие сайты (в том числе YouTube) сами вызывают
-performance.clearResourceTimings() как часть своей телеметрии — если
-просто читать "живой" performance.getEntriesByType('resource') в
-произвольный момент, список может внезапно оказаться пустым, хотя
-ресурсы реально грузились (это и увидел пользователь). Наш собственный
-лог такому стороннему clearResourceTimings() не подчиняется — только
-самой странице, если она полностью перезагрузится (новый window).
+This matters: many sites (YouTube included) call
+performance.clearResourceTimings() themselves as part of their own
+telemetry — if you just read the "live"
+performance.getEntriesByType('resource') at an arbitrary moment, the
+list can suddenly turn out empty even though resources really did load
+(this is exactly what the user saw). Our own log isn't subject to a
+third party's clearResourceTimings() — only to the page itself if it
+fully reloads (a new window).
 
-RESOURCE_ENTRIES_JS — читает из __qttResourceLog (с фолбэком на живой
-performance.getEntriesByType, если по какой-то причине обсёрвер не
-успел установиться раньше самой первой проверки).
+RESOURCE_ENTRIES_JS — reads from __qttResourceLog (with a fallback to
+the live performance.getEntriesByType, in case for some reason the
+observer didn't manage to install before the very first check).
 """
 
 import json
@@ -45,14 +47,14 @@ LOCAL_STORAGE_JS = r"""
 
 RESOURCE_OBSERVER_INSTALL_JS = r"""
 (function() {
-    if (window.__qttResourceLog) return;  // уже установлен для этого документа
+    if (window.__qttResourceLog) return;  // already installed for this document
     window.__qttResourceLog = [];
     try {
         var seen = {};
         function addEntries(list) {
             list.getEntries().forEach(function (e) {
-                // грубая дедупликация — на случай повторной доставки одной
-                // и той же записи через buffered:true + последующий callback
+                // rough deduplication — in case the same entry is
+                // delivered twice via buffered:true + a later callback
                 var key = e.name + '|' + e.startTime;
                 if (seen[key]) return;
                 seen[key] = true;
@@ -103,14 +105,15 @@ RESOURCE_ENTRIES_JS = r"""
 
 def build_fetch_resource_start_script(url: str) -> str:
     """
-    Запускает скачивание содержимого ресурса заново (по его URL) и
-    складывает результат (base64) в window.__qttFetchResult — само
-    runJavaScript() Promise не дожидается (проверено эмпирически, см.
-    core/scenario_runner.py), поэтому забирать результат нужно отдельным
-    поллингом через FETCH_RESOURCE_CHECK_JS.
+    Starts re-downloading the resource's content (by its URL) and stores
+    the result (base64) in window.__qttFetchResult — runJavaScript()
+    itself doesn't wait for a Promise (verified empirically, see
+    core/scenario_runner.py), so the result needs to be fetched
+    separately by polling via FETCH_RESOURCE_CHECK_JS.
 
-    Для чужих доменов без CORS-заголовков fetch() тела не даст — тогда
-    придёт {success: false, error: ...}, а не крэш.
+    For third-party domains without CORS headers, fetch() won't give us
+    the body — in that case you'll get {success: false, error: ...},
+    not a crash.
     """
     safe_url = json.dumps(url)
     return f"""

@@ -1,32 +1,36 @@
 """
-Классы-обвязки над QtWebEngine: страница с перехватом console.log/warn/error,
-перехватчик HTTP-заголовков, авто-подгоняемая область прокрутки под браузер,
-и JS, который пробрасывает язык/тему приложения в саму веб-страницу.
+Wrapper classes around QtWebEngine: a page with console.log/warn/error
+interception, an HTTP header interceptor, an auto-fitting scroll area for
+the browser, and JS that forwards the app's language/theme into the web
+page itself.
 """
 
 from PyQt6.QtWebEngineCore import (
     QWebEnginePage, QWebEngineUrlRequestInterceptor, QWebEngineScript
 )
+from PyQt6.QtWebChannel import QWebChannel
 
 from .inspect_js import RESOURCE_OBSERVER_INSTALL_JS
+from .library_inject import build_library_inject_script
+from .bridge import PyBridge, build_bridge_setup_script
 
 
 def build_page_init_script(navigator_language: str, theme: str) -> str:
     """
-    JS, который встраивается в КАЖДУЮ страницу до её собственных скриптов:
-    - подменяет navigator.language/languages под выбранный язык приложения;
-    - подменяет window.matchMedia('(prefers-color-scheme: ...)') под текущую
-      тему, чтобы JS-логика сайта (не CSS!) видела то же самое, что видит
-      пользователь в самом приложении — примерно то, что делает эмуляция
-      в Chrome DevTools.
+    JS injected into EVERY page before its own scripts run:
+    - overrides navigator.language/languages to match the app's chosen language;
+    - overrides window.matchMedia('(prefers-color-scheme: ...)') to match
+      the current theme, so the site's JS logic (not CSS!) sees the same
+      thing the user sees in the app itself — roughly what Chrome
+      DevTools' emulation does.
 
-    В отличие от первой версии, здесь заводится ПЕРСИСТЕНТНОЕ состояние
-    (window.__qttThemeState) и реальные addEventListener('change', ...) на
-    matchMedia реально сохраняются и вызываются — чтобы сайты, которые
-    следят за сменой темы в реальном времени (а не только при загрузке),
-    тоже реагировали, когда пользователь переключает тему/язык прямо в уже
-    открытой странице (см. build_live_update_script — его гоняют повторно
-    при каждом переключении, не переопределяя matchMedia заново).
+    Unlike the first version, this sets up PERSISTENT state
+    (window.__qttThemeState), and real addEventListener('change', ...)
+    calls on matchMedia are actually kept and invoked — so sites that
+    watch for theme changes in real time (not just on load) also react
+    when the user switches the theme/language right on an already-open
+    page (see build_live_update_script — it's re-run on every switch,
+    without redefining matchMedia again).
     """
     is_dark = "true" if theme == "dark" else "false"
     return f"""
@@ -92,12 +96,12 @@ def build_page_init_script(navigator_language: str, theme: str) -> str:
 
 def build_live_update_script(navigator_language: str, theme: str) -> str:
     """
-    Лёгкий скрипт для УЖЕ загруженной страницы — обновляет тему/язык через
-    ранее установленные window.__qttSetTheme/__qttSetLanguage (не трогая
-    matchMedia заново, чтобы не терять подписчиков на 'change'). Если
-    страница ещё не содержит эту установку (например, полностью статичная
-    страница без document, или скрипт почему-то не сработал) — тихо
-    ничего не делает.
+    A lightweight script for an ALREADY loaded page — updates the
+    theme/language via the previously installed
+    window.__qttSetTheme/__qttSetLanguage (without touching matchMedia
+    again, so 'change' subscribers aren't lost). If the page doesn't have
+    this setup yet (e.g. a fully static page with no document, or the
+    script somehow didn't run) — it silently does nothing.
     """
     is_dark = "true" if theme == "dark" else "false"
     return f"""
@@ -108,15 +112,15 @@ def build_live_update_script(navigator_language: str, theme: str) -> str:
     """
 
 
-
 def configure_profile(profile, interceptor, accept_language, navigator_language, theme):
     """
-    Единая настройка любого профиля WebEngine — и общего (defaultProfile,
-    обычный интерактивный браузинг), и одноразового off-the-record
-    профиля для прогона сценария (см. ScenarioMixin._start_fresh_session):
-    подставляет перехватчик заголовков, Accept-Language, JS-мост
-    языка/темы и наблюдатель за загруженными ресурсами (вкладка "Кэш").
-    Вынесено отдельно, чтобы не дублировать эту настройку в двух местах.
+    Single point of configuration for any WebEngine profile — both the
+    shared one (defaultProfile, regular interactive browsing) and a
+    one-off off-the-record profile for a scenario run (see
+    ScenarioMixin._start_fresh_session): sets the header interceptor,
+    Accept-Language, the language/theme JS bridge, and the loaded-resource
+    observer (the "Cache" tab). Factored out so this setup isn't
+    duplicated in two places.
     """
     profile.setUrlRequestInterceptor(interceptor)
     profile.setHttpAcceptLanguage(accept_language)
@@ -131,11 +135,11 @@ def configure_profile(profile, interceptor, accept_language, navigator_language,
     bridge_script.setSourceCode(build_page_init_script(navigator_language, theme))
     scripts.insert(bridge_script)
 
-    # Ставим НАБЛЮДАТЕЛЬ за ресурсами максимально рано (до скриптов самой
-    # страницы) — иначе на некоторых сайтах (напр. YouTube, у которого своя
-    # телеметрия сама вызывает performance.clearResourceTimings()) к моменту
-    # клика на вкладку "Кэш" список окажется пустым, хотя всё реально
-    # грузилось. См. web/inspect_js.py.
+    # Set up the resource OBSERVER as early as possible (before the page's
+    # own scripts) — otherwise on some sites (e.g. YouTube, whose own
+    # telemetry calls performance.clearResourceTimings() itself) the list
+    # would be empty by the time you click the "Cache" tab, even though
+    # everything really did load. See web/inspect_js.py.
     resource_observer_script = QWebEngineScript()
     resource_observer_script.setName("app-resource-observer")
     resource_observer_script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
@@ -144,23 +148,68 @@ def configure_profile(profile, interceptor, accept_language, navigator_language,
     resource_observer_script.setSourceCode(RESOURCE_OBSERVER_INSTALL_JS)
     scripts.insert(resource_observer_script)
 
+    # g$/g_ (jQuery/lodash under non-standard names, without touching the
+    # page's own $/_ if present) — see web/library_inject.py.
+    #
+    # IMPORTANT: DocumentReady (~DOMContentLoaded), NOT DocumentCreation.
+    # Originally used the earliest injection point (like the theme/lang
+    # bridge), but on real sites with heavy trackers/redirects (TikTok
+    # Pixel, reCAPTCHA, etc.) the document sometimes isn't fully settled
+    # yet at DocumentCreation. lodash handles this fine (doesn't touch the
+    # DOM while loading), but jQuery doesn't: it calls
+    # document.createElement right during its own load, with no
+    # protection at all, and fails with "Cannot read properties of
+    # undefined (reading 'createElement')" (verified on a real site: g_
+    # would load successfully every so often while g$ failed in the same
+    # attempt — that's what pointed to the real cause). DocumentReady
+    # removes the actual source of the race instead of just guarding
+    # against its symptoms. g$/g_ aren't needed before DOMContentLoaded —
+    # a scenario always reaches for them later anyway.
+    #
+    # setRunsOnSubFrames(False) stays as is — g$/g_ are only meant to be
+    # used on the main page.
+    library_script = QWebEngineScript()
+    library_script.setName("app-jquery-lodash-inject")
+    library_script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentReady)
+    library_script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+    library_script.setRunsOnSubFrames(False)
+    library_script.setSourceCode(build_library_inject_script())
+    scripts.insert(library_script)
+
 
 # ---------------------------------------------------------------------------
-# Страница с перехватом console.log/warn/error из JS самой веб-страницы
+# A page that intercepts console.log/warn/error from the web page's own JS,
+# plus the InsertToDB(data) bridge (QWebChannel — tied to a specific page,
+# can't be configured on the profile as a whole, unlike everything else)
 # ---------------------------------------------------------------------------
 class LoggingWebPage(QWebEnginePage):
     def __init__(self, profile, parent, on_console_message):
         super().__init__(profile, parent)
         self._on_console_message = on_console_message
 
+        # InsertToDB(data) from the JS side — see web/bridge.py.
+        # self.bridge is accessible from outside (scenario_mixin.py
+        # subscribes to bridge.dataInserted to write to the DB with the
+        # current scenario_id).
+        self.bridge = PyBridge(self)
+        self._web_channel = QWebChannel(self)
+        self._web_channel.registerObject("qttBridge", self.bridge)
+        self.setWebChannel(self._web_channel)
+
+        bridge_script = QWebEngineScript()
+        bridge_script.setName("app-insert-to-db-bridge")
+        bridge_script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+        bridge_script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+        bridge_script.setRunsOnSubFrames(True)
+        bridge_script.setSourceCode(build_bridge_setup_script())
+        self.scripts().insert(bridge_script)
+
     def javaScriptConsoleMessage(self, level, message, line_number, source_id):
         self._on_console_message(level, message, line_number, source_id)
 
 
-
-
 # ---------------------------------------------------------------------------
-# Перехватчик запросов — сюда подставляются кастомные HTTP-заголовки
+# Request interceptor — custom HTTP headers get plugged in here
 # ---------------------------------------------------------------------------
 class HeaderInterceptor(QWebEngineUrlRequestInterceptor):
     def __init__(self):
@@ -171,4 +220,3 @@ class HeaderInterceptor(QWebEngineUrlRequestInterceptor):
         for name, value in self.headers.items():
             if name:
                 info.setHttpHeader(name.encode("utf-8"), value.encode("utf-8"))
-                

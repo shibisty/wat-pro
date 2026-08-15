@@ -1,10 +1,11 @@
 """
-Обёртка над Windows Task Scheduler (schtasks.exe). Именно ОС отвечает за
-"будить" процесс в нужное время, даже если приложение закрыто — сама
-таблица cron_jobs в SQLite только зеркалит состояние для отображения.
+A wrapper around the Windows Task Scheduler (schtasks.exe). It's the OS
+that's responsible for "waking up" the process at the right time, even
+if the app is closed — the cron_jobs table in SQLite just mirrors the
+state for display purposes.
 
-Работает только на Windows; на других ОС create_task()/run_task_now()
-поднимают RuntimeError с понятным сообщением.
+Only works on Windows; on other OSes create_task()/run_task_now() raise
+a RuntimeError with a clear message.
 """
 
 import os
@@ -21,8 +22,8 @@ def is_supported() -> bool:
 
 def _pythonw_executable() -> str:
     """
-    Предпочитаем pythonw.exe (без консольного окна) — типичный трюк:
-    рядом с python.exe в том же окружении почти всегда лежит pythonw.exe.
+    Prefer pythonw.exe (no console window) — a common trick: pythonw.exe
+    almost always sits right next to python.exe in the same environment.
     """
     exe = sys.executable
     if exe.lower().endswith("python.exe"):
@@ -41,8 +42,8 @@ def create_task(task_name: str, scenario_id: str, schedule_type: str, schedule_v
     """
     schedule_type: 'once' | 'daily' | 'weekly' | 'minutely'
     schedule_value:
-      - 'once' / 'daily' / 'weekly' -> время в формате "HH:MM"
-      - 'minutely' -> число минут между запусками, например "15"
+      - 'once' / 'daily' / 'weekly' -> time in "HH:MM" format
+      - 'minutely' -> number of minutes between runs, e.g. "15"
     """
     if not is_supported():
         raise RuntimeError("Планировщик задач (Task Scheduler) доступен только на Windows")

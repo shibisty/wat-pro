@@ -1,7 +1,8 @@
 """
-JS для рандомного заполнения форм на странице, с учётом type/min/max/
-minlength/maxlength и эвристикой по name/id/placeholder (email, телефон,
-имя, город, индекс, url, дата) — чтобы значения выглядели правдоподобно.
+JS for randomly filling forms on the page, taking type/min/max/
+minlength/maxlength into account, plus heuristics based on name/id/
+placeholder (email, phone, name, city, zip, url, date) — so the values
+look plausible.
 """
 
 RANDOMIZE_FORM_JS = r"""

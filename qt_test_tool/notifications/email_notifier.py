@@ -1,7 +1,7 @@
 """
-Отправка e-mail уведомлений об успехе/неудаче прогона сценария.
-Настройки (хост/порт/адреса/флаги) — из notification_settings_repo,
-пароль — из secure_storage (keyring).
+Sends e-mail notifications about a scenario run's success/failure.
+Settings (host/port/addresses/flags) come from notification_settings_repo,
+the password from secure_storage (keyring).
 """
 
 import smtplib
@@ -31,11 +31,11 @@ def build_message(scenario_name: str, success: bool, details: str, from_addr: st
 
 def send_notification(conn, scenario_name: str, success: bool, details: str = ""):
     """
-    Отправляет уведомление, если это включено в настройках для данного
-    результата (notify_on_success / notify_on_failure). Тихо ничего не
-    делает, если рассылка не настроена — но пробрасывает исключение,
-    если настроена, но отправка реально не удалась (чтобы вызывающий код
-    мог залогировать проблему, а не потерять её молча).
+    Sends a notification if it's enabled in the settings for this
+    particular result (notify_on_success / notify_on_failure). Silently
+    does nothing if notifications aren't configured — but propagates an
+    exception if they ARE configured and sending genuinely failed (so the
+    calling code can log the problem instead of losing it silently).
     """
     settings = notification_settings_repo.get_settings(conn)
 
@@ -50,10 +50,10 @@ def send_notification(conn, scenario_name: str, success: bool, details: str = ""
 
 def send_manual_notification(conn, scenario_name: str, details: str = ""):
     """
-    Отправка по явному шагу сценария с notify=True — срабатывает всегда
-    (не завязана на notify_on_success/notify_on_failure, которые относятся
-    только к финальному результату всего сценария), но по-прежнему требует
-    настроенного SMTP (хост + получатель).
+    Sends from an explicit scenario step with notify=True — always fires
+    (not tied to notify_on_success/notify_on_failure, which only apply to
+    the scenario's overall final result), but still requires SMTP to be
+    configured (host + recipient).
     """
     settings = notification_settings_repo.get_settings(conn)
     return _send(conn, settings, scenario_name, True, details, subject_note="Уведомление из сценария")
@@ -83,7 +83,7 @@ def _send(conn, settings, scenario_name, success, details, subject_note=None):
 
 
 def send_test_email(settings: dict, password: str):
-    """Отправить тестовое письмо с явно переданными настройками (используется кнопкой «Отправить тест» в UI)."""
+    """Sends a test email with explicitly passed-in settings (used by the "Send test" button in the UI)."""
     msg = build_message(
         "Тестовое письмо", True,
         "Если вы получили это письмо — настройки SMTP работают корректно.",

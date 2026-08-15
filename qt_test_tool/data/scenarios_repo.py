@@ -1,13 +1,13 @@
 """
-Сценарии снова хранятся как отдельные JSON-файлы в scenarios/ — так их
-проще передавать другим пользователям (просто скопировать файл). У
-каждого сценария есть стабильный `id` (UUID), сгенерированный один раз
-при создании — по нему на сценарий ссылаются collected_data и cron_jobs
-в SQLite (там это просто текстовое поле, без FK на файлы).
+Scenarios are stored again as separate JSON files in scenarios/ — that
+makes them easier to hand off to other users (just copy the file). Each
+scenario has a stable `id` (UUID), generated once on creation — that's
+what collected_data and cron_jobs in SQLite reference it by (there it's
+just a plain text field, no FK to the files).
 
-Файл сценария хранит: name, url (стартовый адрес), width/height (размер
-окна браузера для тестов моб/таблет/десктоп), zoom_auto/zoom_percent,
-steps (список шагов).
+A scenario file stores: name, url (start address), width/height (browser
+window size for mobile/tablet/desktop testing), zoom_auto/zoom_percent,
+steps (the list of steps).
 """
 
 import json
@@ -107,7 +107,7 @@ def update_scenario(scenario_id: str, name: str, steps: list, url: str = "", wid
 
 def upsert_scenario_by_name(name: str, steps: list, url: str = "", width: int = 1366,
                              height: int = 768, zoom_auto: bool = True, zoom_percent: int = 100) -> str:
-    """Сохранить сценарий: обновить, если с таким именем уже есть, иначе создать."""
+    """Save a scenario: update it if one with this name already exists, otherwise create it."""
     existing = get_scenario_by_name(name)
     if existing:
         update_scenario(existing["id"], name, steps, url, width, height, zoom_auto, zoom_percent)
