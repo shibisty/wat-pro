@@ -10,7 +10,7 @@ from typing import Optional
 import keyring
 import keyring.errors
 
-SERVICE_NAME = "qt_test_tool_smtp"
+SERVICE_NAME = "src_smtp"
 
 
 class SecureStorageUnavailable(Exception):

@@ -30,18 +30,18 @@ QT6_CUSTOM_RESOURCES = r"C:\qt6install\resources"
 QT6_CUSTOM_LOCALES = r"C:\qt6install\translations\qtwebengine_locales"
 QT6_CUSTOM_PLUGINS = r"C:\qt6install\plugins"
 
-hiddenimports = collect_submodules("qt_test_tool")
+hiddenimports = collect_submodules("src")
 
 # Put translations/ and resources/ DIRECTLY in the bundle root (next to the
-# executable in --onedir), rather than under qt_test_tool/... — this is exactly
+# executable in --onedir), rather than under src/... — this is exactly
 # where core/config.py looks for them
 # (BUNDLE_DIR/translations, BUNDLE_DIR/resources). collect_data_files()
-# normally preserves the package structure (qt_test_tool/translations/...),
+# normally preserves the package structure (src/translations/...),
 # which does not match this location, so we handle it explicitly here.
 datas = []
-for f in glob.glob("qt_test_tool/translations/*.json"):
+for f in glob.glob("src/translations/*.json"):
     datas.append((f, "translations"))
-for f in glob.glob("qt_test_tool/resources/*"):
+for f in glob.glob("src/resources/*"):
     datas.append((f, "resources"))
 
 # WebEngine resources/locales from the custom build — IMPORTANT: these must
@@ -174,7 +174,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon="qt_test_tool/resources/icon.ico",
+    icon="src/resources/icon.ico",
 )
 
 coll = COLLECT(

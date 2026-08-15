@@ -62,7 +62,7 @@ button in the HTML panel header.
 
 ```
 run.py
-qt_test_tool/
+src/
 ├── main.py                    # GUI; --run-scenario <id> → headless execution
 ├── core/                      # theme, i18n, system detection, ScenarioRunner
 ├── web/

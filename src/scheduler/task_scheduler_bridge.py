@@ -35,7 +35,7 @@ def _pythonw_executable() -> str:
 
 def _build_run_command(scenario_id: str) -> str:
     pythonw = _pythonw_executable()
-    return f'"{pythonw}" -m qt_test_tool.main --run-scenario {scenario_id}'
+    return f'"{pythonw}" -m src.main --run-scenario {scenario_id}'
 
 
 def create_task(task_name: str, scenario_id: str, schedule_type: str, schedule_value: str) -> bool:

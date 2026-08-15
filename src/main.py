@@ -6,7 +6,7 @@ Normal (GUI) run:
 
 Headless run of a single scenario (invoked by Windows Task Scheduler,
 see scheduler/task_scheduler_bridge.py):
-    python -m qt_test_tool.main --run-scenario 3
+    python -m src.main --run-scenario 3
 """
 
 import argparse

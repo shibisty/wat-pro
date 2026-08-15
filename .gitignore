@@ -5,3 +5,4 @@ venv
 __pycache__
 webengine_test_print.pdf
 settings.ini
+*.sqlite3

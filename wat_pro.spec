@@ -30,17 +30,17 @@ QT6_CUSTOM_RESOURCES = r"C:\qt6install\resources"
 QT6_CUSTOM_LOCALES = r"C:\qt6install\translations\qtwebengine_locales"
 QT6_CUSTOM_PLUGINS = r"C:\qt6install\plugins"
 
-hiddenimports = collect_submodules("qt_test_tool")
+hiddenimports = collect_submodules("src")
 
 # Кладём translations/ и resources/ ПРЯМО в корень бандла (рядом с exe в
-# --onedir), а не под qt_test_tool/... — именно там их ищет core/config.py
+# --onedir), а не под src/... — именно там их ищет core/config.py
 # (BUNDLE_DIR/translations, BUNDLE_DIR/resources). collect_data_files()
-# по умолчанию сохраняет структуру пакета (qt_test_tool/translations/...),
+# по умолчанию сохраняет структуру пакета (src/translations/...),
 # что не совпадает с этим расположением — поэтому здесь делаем явно.
 datas = []
-for f in glob.glob("qt_test_tool/translations/*.json"):
+for f in glob.glob("src/translations/*.json"):
     datas.append((f, "translations"))
-for f in glob.glob("qt_test_tool/resources/*"):
+for f in glob.glob("src/resources/*"):
     datas.append((f, "resources"))
 
 # Ресурсы/локали WebEngine из своей сборки — ВАЖНО: тоже под PyQt6/Qt6/...,
@@ -159,7 +159,7 @@ exe = EXE(
     strip=False,
     upx=False,
     console=False,
-    icon="qt_test_tool/resources/icon.ico",
+    icon="src/resources/icon.ico",
 )
 
 coll = COLLECT(
