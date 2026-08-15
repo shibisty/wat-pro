@@ -19,3 +19,4 @@ Features
 - Added a build based on QtWebEngine with H.264 support
 - Added scroll movement recording
 - Added explicit fields for the initial URL and window size to scenarios
+- Added import from Chrome DevTools Recorder to scenario steps

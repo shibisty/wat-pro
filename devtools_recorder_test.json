@@ -1,0 +1,72 @@
+{
+    "title": "Recording 8/14/2026 at 6:35:05 AM",
+    "steps": [
+        {
+            "type": "setViewport",
+            "width": 1634,
+            "height": 1271,
+            "deviceScaleFactor": 1,
+            "isMobile": false,
+            "hasTouch": false,
+            "isLandscape": false
+        },
+        {
+            "type": "navigate",
+            "url": "https://github.com/shibisty/wat-pro",
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://github.com/shibisty/wat-pro",
+                    "title": "shibisty/wat-pro"
+                }
+            ]
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "aria/Alexander Shibisty"
+                ],
+                [
+                    "div.position-relative [data-testid='github-avatar']"
+                ],
+                [
+                    "xpath///*[@data-testid=\"github-avatar\"]"
+                ],
+                [
+                    "pierce/div.position-relative [data-testid='github-avatar']"
+                ]
+            ],
+            "offsetY": 15,
+            "offsetX": 8
+        },
+        {
+            "type": "click",
+            "target": "main",
+            "selectors": [
+                [
+                    "#_r_7d_--label"
+                ],
+                [
+                    "xpath///*[@id=\"_r_7d_--label\"]"
+                ],
+                [
+                    "pierce/#_r_7d_--label"
+                ],
+                [
+                    "text/Repositories"
+                ]
+            ],
+            "offsetY": 10,
+            "offsetX": 26,
+            "assertedEvents": [
+                {
+                    "type": "navigation",
+                    "url": "https://github.com/shibisty?tab=repositories",
+                    "title": ""
+                }
+            ]
+        }
+    ]
+}

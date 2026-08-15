@@ -28,9 +28,10 @@ regardless.
 """
 
 import copy
+import json
 
 from PyQt6.QtCore import QUrl, QTimer
-from PyQt6.QtWidgets import QInputDialog, QListWidgetItem, QDialog, QMessageBox
+from PyQt6.QtWidgets import QInputDialog, QListWidgetItem, QDialog, QMessageBox, QFileDialog
 from PyQt6.QtWebEngineCore import QWebEngineProfile
 
 from ...core.theming import THEMES, qcolor
@@ -247,7 +248,12 @@ class ScenarioMixin:
     def _refresh_steps_list(self):
         self.steps_list.clear()
         for i, step in enumerate(self.steps):
-            preview = step["js"].strip().replace("\n", " ")[:60]
+            if step.get("kind") == "recorder":
+                title = step.get("recorder_title") or "Recorder"
+                count = len(step.get("recorder_steps", []))
+                preview = f"🎬 {title} ({count} {self.t('recorder_actions_suffix')})"
+            else:
+                preview = step["js"].strip().replace("\n", " ")[:60]
             marks = ""
             if step.get("collect"):
                 marks += " 💾"
@@ -278,6 +284,66 @@ class ScenarioMixin:
         self._autosave()
         self.log("Отменено последнее изменение шагов", "ok")
 
+    def import_recorder_file(self):
+        """
+        The 🎬 Import Recorder button — takes a Chrome DevTools Recorder
+        export (.json) and appends it to the current scenario as ONE
+        opaque step (see core/scenario_runner.py /
+        web/recorder_replay_js.py for how it actually plays back).
+        """
+        path, _ = QFileDialog.getOpenFileName(
+            self, self.t("dialog_import_recorder_title"), "", "JSON (*.json)"
+        )
+        if not path:
+            return
+        step = self._load_recorder_file(path)
+        if step is None:
+            return
+        self._push_undo()
+        self.steps.append(step)
+        self._refresh_steps_list()
+        self._autosave()
+        self.log(self.t("log_recorder_imported").format(title=step["recorder_title"]), "ok")
+
+    def _load_recorder_file(self, path):
+        """
+        Parses and validates a Recorder .json file, returning a ready
+        scenario step dict, or None (with an error already logged) if
+        the file isn't a valid Recorder export.
+
+        setViewport is pulled out here, at import time, if it's present
+        as the first step (the overwhelmingly common case — Chrome always
+        records it as the very first action) — page JS can't resize the
+        actual browser window, so it's applied separately, on the Python
+        side, right before the rest of the recording plays (see
+        ScenarioRunner._execute_recorder_step / on_recorder_viewport).
+        """
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, json.JSONDecodeError) as e:
+            self.log(self.t("log_recorder_import_failed").format(error=str(e)), "error")
+            return None
+
+        raw_steps = data.get("steps")
+        if not isinstance(raw_steps, list):
+            self.log(self.t("log_recorder_invalid_file"), "error")
+            return None
+
+        viewport = None
+        if raw_steps and raw_steps[0].get("type") == "setViewport":
+            viewport = {"width": raw_steps[0].get("width"), "height": raw_steps[0].get("height")}
+            raw_steps = raw_steps[1:]
+
+        return {
+            "kind": "recorder",
+            "recorder_title": data.get("title") or "Recorder",
+            "recorder_steps": raw_steps,
+            "recorder_viewport": viewport,
+            "collect": False,
+            "notify": False,
+        }
+
     def add_step(self):
         dlg = StepDialog(tr=self.t, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
@@ -293,10 +359,44 @@ class ScenarioMixin:
         if row < 0:
             return
         step = self.steps[row]
+        if step.get("kind") == "recorder":
+            self._edit_recorder_step(row, step)
+            return
         dlg = StepDialog(step, tr=self.t, parent=self)
         if dlg.exec() == QDialog.DialogCode.Accepted:
             self._push_undo()
             self.steps[row] = dlg.get_data()
+            self._refresh_steps_list()
+            self._autosave()
+
+    def _edit_recorder_step(self, row, step):
+        """
+        A recorder step isn't JS text — the normal StepDialog doesn't
+        apply to it. For now: show what it is, offer to delete it or
+        replace it with a freshly re-imported recording (e.g. after
+        re-recording in Chrome). No in-place field editing of individual
+        recorded actions yet.
+        """
+        title = step.get("recorder_title") or "Recorder"
+        count = len(step.get("recorder_steps", []))
+        reply = QMessageBox.question(
+            self,
+            self.t("dialog_recorder_step_title"),
+            self.t("dialog_recorder_step_text").format(title=title, count=count),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            path, _ = QFileDialog.getOpenFileName(
+                self, self.t("dialog_import_recorder_title"), "", "JSON (*.json)"
+            )
+            if not path:
+                return
+            new_step = self._load_recorder_file(path)
+            if new_step is None:
+                return
+            self._push_undo()
+            self.steps[row] = new_step
             self._refresh_steps_list()
             self._autosave()
 
@@ -467,6 +567,12 @@ class ScenarioMixin:
             self.log("=== Сессия очищена после завершения сценария ===")
             self._update_run_controls()
 
+        def on_recorder_viewport(width, height):
+            if width:
+                self.width_spin.setValue(width)
+            if height:
+                self.height_spin.setValue(height)
+
         start_msg = f"=== Запуск сценария '{self.current_scenario_name or '(без имени)'}' ==="
         self._scenario_runner.run(
             self.steps,
@@ -476,6 +582,7 @@ class ScenarioMixin:
             on_notify=on_notify,
             on_finished=on_finished,
             on_paused=on_paused,
+            on_recorder_viewport=on_recorder_viewport,
             start_message=start_msg,
             resume_from=resume_from,
         )

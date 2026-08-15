@@ -208,8 +208,12 @@ class ScenarioEditorPage(
         self.move_down_btn = QPushButton("↓")
         self.move_down_btn.setProperty("class", "circleBtn")
         self.move_down_btn.clicked.connect(lambda: self.move_step(1))
+        self.import_recorder_btn = QPushButton("🎬")
+        self.import_recorder_btn.setProperty("class", "circleBtn")
+        self.import_recorder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.import_recorder_btn.clicked.connect(self.import_recorder_file)
         for b in (self.add_step_btn, self.edit_step_btn, self.delete_step_btn,
-                  self.move_up_btn, self.move_down_btn):
+                  self.move_up_btn, self.move_down_btn, self.import_recorder_btn):
             step_btn_row.addWidget(b)
         scenario_layout.addLayout(step_btn_row)
 
@@ -561,6 +565,7 @@ class ScenarioEditorPage(
         self.add_step_btn.setToolTip(t("tooltip_add_step"))
         self.edit_step_btn.setToolTip(t("tooltip_edit_step"))
         self.delete_step_btn.setToolTip(t("tooltip_delete_step"))
+        self.import_recorder_btn.setToolTip(t("tooltip_import_recorder"))
         self.move_up_btn.setToolTip(t("tooltip_move_up"))
         self.move_down_btn.setToolTip(t("tooltip_move_down"))
         self.play_btn.setText("▶  " + t("btn_play"))

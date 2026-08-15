@@ -13,6 +13,7 @@ from PyQt6.QtWebChannel import QWebChannel
 from .inspect_js import RESOURCE_OBSERVER_INSTALL_JS
 from .library_inject import build_library_inject_script
 from .bridge import PyBridge, build_bridge_setup_script
+from .recorder_replay_js import RECORDER_REPLAY_INSTALL_JS
 
 
 def build_page_init_script(navigator_language: str, theme: str) -> str:
@@ -176,6 +177,18 @@ def configure_profile(profile, interceptor, accept_language, navigator_language,
     library_script.setSourceCode(build_library_inject_script())
     scripts.insert(library_script)
 
+    # Chrome DevTools Recorder step interpreter (see
+    # web/recorder_replay_js.py) — DocumentCreation is safe here (unlike
+    # g$/g_ above) because this only defines functions at install time,
+    # it doesn't touch the DOM until a recording is actually run.
+    recorder_script = QWebEngineScript()
+    recorder_script.setName("app-recorder-replay")
+    recorder_script.setInjectionPoint(QWebEngineScript.InjectionPoint.DocumentCreation)
+    recorder_script.setWorldId(QWebEngineScript.ScriptWorldId.MainWorld)
+    recorder_script.setRunsOnSubFrames(False)
+    recorder_script.setSourceCode(RECORDER_REPLAY_INSTALL_JS)
+    scripts.insert(recorder_script)
+
 
 # ---------------------------------------------------------------------------
 # A page that intercepts console.log/warn/error from the web page's own JS,
@@ -220,3 +233,4 @@ class HeaderInterceptor(QWebEngineUrlRequestInterceptor):
         for name, value in self.headers.items():
             if name:
                 info.setHttpHeader(name.encode("utf-8"), value.encode("utf-8"))
+                

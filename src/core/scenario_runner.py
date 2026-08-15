@@ -35,11 +35,16 @@ would hang until the timeout), we use a persistent subscription to
 loadStarted/loadFinished with two flags and explicit polling of those flags.
 """
 
+import json
+
 from PyQt6.QtCore import QTimer
+
+from ..web.recorder_replay_js import build_recorder_run_script, RECORDER_RESULT_CHECK_JS
 
 _POLL_INTERVAL_MS = 200
 _NAVIGATION_TIMEOUT_MS = 15000
 _NAV_DETECT_GRACE_MS = 350  # window after a step to notice a slightly delayed navigation start
+_RECORDER_TIMEOUT_MS = 30000  # a whole recording can be many actions long
 
 
 class ScenarioRunner:
@@ -53,6 +58,7 @@ class ScenarioRunner:
         self._on_collect = lambda index, step, result: None
         self._on_notify = lambda index, step, result: None
         self._on_paused = lambda index: None
+        self._on_recorder_viewport = lambda width, height: None
 
         # Pause: requested via request_pause(), actually applied in
         # _continue_after_step() — the single "junction point" between
@@ -82,7 +88,7 @@ class ScenarioRunner:
 
     def run(self, steps, on_log=None, on_step_result=None, on_finished=None,
             start_message=None, on_collect=None, on_notify=None, on_paused=None,
-            resume_from=0):
+            on_recorder_viewport=None, resume_from=0):
         """
         steps: [{
             "js": str, "expected": str, "collect": bool, "notify": bool,
@@ -90,6 +96,14 @@ class ScenarioRunner:
             "wait_for_selector": str,          # CSS selector, wait before the step
             "wait_timeout_ms": int,            # selector wait timeout
             "delay_ms": int,                   # extra pause after the step
+            "kind": "recorder",                # optional — a Chrome DevTools
+                                                # Recorder step instead of raw
+                                                # "js"; see recorder_steps/
+                                                # recorder_viewport below
+            "recorder_steps": list,            # the recording's own steps
+                                                # (Puppeteer Replay schema),
+                                                # minus any setViewport entry
+            "recorder_viewport": {"width": int, "height": int},  # optional
         }, ...]
         on_log(text, level="info"|"ok"|"error")
         on_step_result(index, success: bool, result) — called after each step
@@ -99,6 +113,10 @@ class ScenarioRunner:
             (request_pause()); next_index is which step to resume from
         on_collect(index, step, result) — called for steps with collect=True
         on_notify(index, step, result) — called for steps with notify=True
+        on_recorder_viewport(width, height) — called for a recorder step
+            that has a recorder_viewport, BEFORE its recording plays —
+            page JS can't resize the actual browser window, so this needs
+            to be applied by whoever owns the UI (width_spin/height_spin)
         start_message: if set, printed instead of the standard "Running scenario"
         resume_from: step index to start from (0 — from the beginning; to
             resume after a pause, pass runner.paused_at_index)
@@ -119,6 +137,7 @@ class ScenarioRunner:
         self._on_collect = on_collect or self._on_collect
         self._on_notify = on_notify or self._on_notify
         self._on_paused = on_paused or self._on_paused
+        self._on_recorder_viewport = on_recorder_viewport or self._on_recorder_viewport
 
         self.running = True
         self._pause_requested = False
@@ -187,6 +206,11 @@ class ScenarioRunner:
 
     def _execute_step(self, index):
         step = self._steps[index]
+
+        if step.get("kind") == "recorder":
+            self._execute_recorder_step(index)
+            return
+
         self._on_log(f"Шаг {index + 1}: {step['js'].strip()[:80]}")
 
         # reset the flags before the step — from here on we watch whether
@@ -195,45 +219,125 @@ class ScenarioRunner:
         self._nav_finished = False
 
         def callback(result):
-            if step.get("collect"):
-                try:
-                    self._on_collect(index, step, result)
-                except Exception as e:
-                    self._on_log(f"Не удалось сохранить результат шага {index + 1} в БД: {e}", "error")
+            self._finish_step(index, result)
 
-            if step.get("notify"):
-                try:
-                    self._on_notify(index, step, result)
-                except Exception as e:
-                    self._on_log(f"Не удалось отправить уведомление на шаге {index + 1}: {e}", "error")
+        self.page.runJavaScript(step["js"], callback)
 
-            expected = step.get("expected", "")
-            if expected.strip():
-                actual_str = "" if result is None else str(result)
-                if actual_str != expected:
+    def _finish_step(self, index, result):
+        step = self._steps[index]
+
+        if step.get("collect"):
+            try:
+                self._on_collect(index, step, result)
+            except Exception as e:
+                self._on_log(f"Не удалось сохранить результат шага {index + 1} в БД: {e}", "error")
+
+        if step.get("notify"):
+            try:
+                self._on_notify(index, step, result)
+            except Exception as e:
+                self._on_log(f"Не удалось отправить уведомление на шаге {index + 1}: {e}", "error")
+
+        expected = step.get("expected", "")
+        if expected.strip():
+            actual_str = "" if result is None else str(result)
+            if actual_str != expected:
+                self._on_log(
+                    f"✗ Шаг {index + 1} провален. Ожидалось: {expected!r}, "
+                    f"получено: {actual_str!r}",
+                    "error",
+                )
+                self._on_step_result(index, False, result)
+                self.running = False
+                self._on_log(f"=== Сценарий остановлен на шаге {index + 1} ===", "error")
+                self._on_finished(False)
+                return
+            self._on_log(f"✓ Шаг {index + 1} успешен", "ok")
+            self._on_step_result(index, True, result)
+        else:
+            self._on_log(f"✓ Шаг {index + 1} выполнен, результат: {result}", "ok")
+            self._on_step_result(index, True, result)
+
+        # short window to notice navigation that started not
+        # synchronously during JS execution but slightly later (the
+        # next event loop tick) — without this, fast steps would race
+        # ahead before the page even had a chance to start loading
+        QTimer.singleShot(_NAV_DETECT_GRACE_MS, lambda: self._after_step_grace(index))
+
+    def _execute_recorder_step(self, index):
+        """
+        Replays a Chrome DevTools Recorder recording stored on this step
+        (see web/recorder_replay_js.py) — the whole recording runs as one
+        opaque unit, not decomposed into separate steps of our own.
+        """
+        step = self._steps[index]
+        title = step.get("recorder_title") or "Recorder"
+        recorder_steps = step.get("recorder_steps", [])
+        self._on_log(f"Шаг {index + 1}: воспроизвожу запись «{title}» ({len(recorder_steps)} действий)")
+
+        # setViewport can't be applied from page JS — it's the actual
+        # browser window, not something the page controls — so it was
+        # pulled out at import time and gets applied here, on the Python
+        # side, before the rest of the recording plays.
+        viewport = step.get("recorder_viewport")
+        if viewport:
+            try:
+                self._on_recorder_viewport(viewport.get("width"), viewport.get("height"))
+            except Exception as e:
+                self._on_log(f"Не удалось применить размер окна из записи: {e}", "error")
+
+        self._nav_started = False
+        self._nav_finished = False
+
+        self.page.runJavaScript(build_recorder_run_script(recorder_steps))
+        self._poll_recorder_result(index, 0)
+
+    def _poll_recorder_result(self, index, elapsed_ms):
+        if not self.running:
+            return  # the scenario was stopped while we were waiting
+
+        def on_check(result_json):
+            if not self.running:
+                return
+            if result_json is None:
+                if elapsed_ms >= _RECORDER_TIMEOUT_MS:
                     self._on_log(
-                        f"✗ Шаг {index + 1} провален. Ожидалось: {expected!r}, "
-                        f"получено: {actual_str!r}",
+                        f"Шаг {index + 1}: воспроизведение записи не завершилось за "
+                        f"{_RECORDER_TIMEOUT_MS} мс",
                         "error",
                     )
-                    self._on_step_result(index, False, result)
+                    self._on_step_result(index, False, None)
                     self.running = False
                     self._on_log(f"=== Сценарий остановлен на шаге {index + 1} ===", "error")
                     self._on_finished(False)
                     return
-                self._on_log(f"✓ Шаг {index + 1} успешен", "ok")
-                self._on_step_result(index, True, result)
-            else:
-                self._on_log(f"✓ Шаг {index + 1} выполнен, результат: {result}", "ok")
-                self._on_step_result(index, True, result)
+                QTimer.singleShot(
+                    _POLL_INTERVAL_MS,
+                    lambda: self._poll_recorder_result(index, elapsed_ms + _POLL_INTERVAL_MS),
+                )
+                return
 
-            # short window to notice navigation that started not
-            # synchronously during JS execution but slightly later (the
-            # next event loop tick) — without this, fast steps would race
-            # ahead before the page even had a chance to start loading
-            QTimer.singleShot(_NAV_DETECT_GRACE_MS, lambda: self._after_step_grace(index))
+            try:
+                result = json.loads(result_json)
+            except (TypeError, ValueError):
+                result = {"success": False, "error": "не удалось разобрать результат воспроизведения"}
 
-        self.page.runJavaScript(step["js"], callback)
+            if not result.get("success"):
+                at_step = result.get("atStep")
+                at_step_info = f" (действие №{at_step + 1} записи)" if at_step is not None else ""
+                self._on_log(
+                    f"✗ Шаг {index + 1} провален{at_step_info}: {result.get('error', '?')}",
+                    "error",
+                )
+                self._on_step_result(index, False, None)
+                self.running = False
+                self._on_log(f"=== Сценарий остановлен на шаге {index + 1} ===", "error")
+                self._on_finished(False)
+                return
+
+            self._finish_step(index, None)
+
+        self.page.runJavaScript(RECORDER_RESULT_CHECK_JS, on_check)
 
     def _after_step_grace(self, index):
         if not self.running:
@@ -277,3 +381,4 @@ class ScenarioRunner:
             QTimer.singleShot(delay_ms, lambda: self._run_step(index + 1))
         else:
             self._run_step(index + 1)
+            
